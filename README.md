@@ -19,7 +19,8 @@
 - **应用内检查更新** —— 设置 → 检查更新，读取 GitHub Releases 的最新版本，直接下载 APK 并调起系统安装；启动时也会静默查一次，有新版本在底部提示。
 - 内置了一份课表（梁宇宸 2026-2027-1，从你的 PDF 解析而来），**平时完全离线**；只有「检查更新」会访问 GitHub。
 
-> 想把 App 发布到自己的 GitHub 并让它自动发版？看 **[PUBLISH.md](PUBLISH.md)**（全程网页，五分钟）。
+> 已发布到 GitHub：<https://github.com/Leiou1939/BetterTimetable/releases/latest>  
+> 发版与更新说明见 **[PUBLISH.md](PUBLISH.md)**。
 
 ---
 

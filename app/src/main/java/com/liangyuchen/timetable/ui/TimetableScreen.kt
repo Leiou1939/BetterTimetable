@@ -93,6 +93,8 @@ import com.liangyuchen.timetable.update.UpdateInfo
 import com.liangyuchen.timetable.update.UpdateDialog
 import com.liangyuchen.timetable.update.UpdateChecker
 import com.liangyuchen.timetable.update.AutoUpdateCheck
+import com.liangyuchen.timetable.update.UpdateAvailableDialog
+import com.liangyuchen.timetable.update.UpdateSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -130,21 +132,25 @@ fun TimetableScreen(
     var syncing by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateToInstall by remember { mutableStateOf<UpdateInfo?>(null) }
 
-    // 启动时静默查一次更新，有新版本就在底部提示（点「更新」进更新对话框）
+    // 启动时自动检查：有新版本就弹窗（版本号 + 更新内容 + 立即更新/下次再说）
     AutoUpdateCheck(context = context) { info ->
         pendingUpdate = info
     }
-    LaunchedEffect(pendingUpdate) {
-        val info = pendingUpdate ?: return@LaunchedEffect
-        val res = snackbar.showSnackbar(
-            message = "发现新版本 ${info.tag}",
-            actionLabel = "更新",
-            withDismissAction = true,
-            duration = SnackbarDuration.Long,
+    pendingUpdate?.let { info ->
+        UpdateAvailableDialog(
+            info = info,
+            onUpdate = {
+                pendingUpdate = null
+                updateToInstall = info          // 进对话框后直接开始下载，不用再点一次
+                showUpdateDialog = true
+            },
+            onLater = {
+                UpdateSettings.markSkipped(context, info.versionCode)
+                pendingUpdate = null
+            },
         )
-        if (res == SnackbarResult.ActionPerformed) showUpdateDialog = true
-        pendingUpdate = null
     }
 
     // 选择课表 PDF 并导入
@@ -432,7 +438,14 @@ fun TimetableScreen(
     }
 
     if (showUpdateDialog) {
-        UpdateDialog(context = context, onDismiss = { showUpdateDialog = false })
+        UpdateDialog(
+            context = context,
+            autoStartInfo = updateToInstall,
+            onDismiss = {
+                showUpdateDialog = false
+                updateToInstall = null
+            },
+        )
     }
 
     // 导入 PDF 的状态提示与预览

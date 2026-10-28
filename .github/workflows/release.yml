@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # 需要完整历史来生成更新内容
 
       - name: 配置 JDK 17
         uses: actions/setup-java@v4
@@ -65,8 +67,14 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
-          NOTES="自动构建于 $(date -u '+%Y-%m-%d %H:%M UTC')，提交 ${{ github.sha }}。安装后可在「设置 → 检查更新」直接升级。"
+          # 更新内容 = 上次发布以来的提交标题，App 的「发现新版本」弹窗直接显示这段
+          PREV=$(git tag --sort=-creatordate | head -1 || true)
+          if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
+          NOTES=$(git log --pretty=format:'- %s' "$RANGE" | head -40)
+          if [ -z "$NOTES" ]; then NOTES="- 常规更新"; fi
+          printf '%s\n\n%s\n' "$NOTES" "(构建于 $(date -u '+%Y-%m-%d %H:%M UTC')，提交 ${GITHUB_SHA:0:7})" > notes.md
+          echo "----- 更新内容 -----"; cat notes.md
           gh release create "$TAG" dist/*.apk \
             --title "课程表 $VERSION_NAME" \
-            --notes "$NOTES" \
+            --notes-file notes.md \
           || gh release upload "$TAG" dist/*.apk --clobber

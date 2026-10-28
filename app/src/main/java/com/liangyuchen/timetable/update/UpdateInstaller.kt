@@ -9,12 +9,13 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import java.io.File
 
-/** 更新相关的偏好：GitHub 仓库地址、是否自动检查。 */
+/** 更新相关的偏好：GitHub 仓库地址、是否自动检查、被跳过的版本。 */
 object UpdateSettings {
 
     private const val PREFS = "timetable_update"
     private const val KEY_REPO = "repo"
     private const val KEY_AUTO_CHECK = "auto_check"
+    private const val KEY_SKIPPED = "skipped_version_code"
 
     fun repo(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -34,6 +35,18 @@ object UpdateSettings {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_AUTO_CHECK, enabled)
             .apply()
+    }
+
+    /** 用户点过「下次再说」的版本号：这个版本不再打扰，更新的版本仍会提示。 */
+    fun skippedVersionCode(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_SKIPPED, 0)
+
+    fun markSkipped(context: Context, versionCode: Int) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (versionCode > p.getInt(KEY_SKIPPED, 0)) {
+            p.edit().putInt(KEY_SKIPPED, versionCode).apply()
+        }
     }
 }
 
