@@ -54,8 +54,9 @@ jobs:
       - name: 准备发布文件
         run: |
           mkdir -p dist
+          # 附件名用纯 ASCII：中文名经 gh 上传后会被吃掉（实测变成了 "-1.1.apk"）
           cp app/build/outputs/apk/release/app-release.apk \
-             "dist/课程表-${{ steps.version.outputs.name }}.apk"
+             "dist/timetable-${{ steps.version.outputs.name }}.apk"
           ls -lh dist
 
       - name: 发布 Release
