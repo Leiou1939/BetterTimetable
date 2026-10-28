@@ -8,6 +8,12 @@ import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -21,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -343,9 +350,24 @@ fun TimetableScreen(
                     modifier = Modifier.weight(1f),
                 )
             } else {
+                AnimatedContent(
+                    targetState = viewModel.week,
+                    transitionSpec = {
+                        // 往后翻：新的一周从右侧滑入；往前翻则相反
+                        if (targetState > initialState) {
+                            (slideInHorizontally { it } + fadeIn()) togetherWith
+                                (slideOutHorizontally { -it } + fadeOut())
+                        } else {
+                            (slideInHorizontally { -it } + fadeIn()) togetherWith
+                                (slideOutHorizontally { it } + fadeOut())
+                        }
+                    },
+                    label = "week",
+                    modifier = Modifier.weight(1f),
+                ) { shownWeek ->
                 WeekGrid(
                     data = data,
-                    week = viewModel.week,
+                    week = shownWeek,
                     today = today,
                     selectedDay = selectedDay,
                     onCourseClick = { detailCourse = it },
@@ -361,8 +383,9 @@ fun TimetableScreen(
                         viewModel.nextWeek()
                         selectedDay = ScheduleCalc.dayIndexOf(today)
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxSize(),
                 )
+                }
             }
         }
     }
@@ -919,6 +942,9 @@ private fun SettingsDialog(
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .widthIn(max = 360.dp),
             confirmButton = {
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { millis ->

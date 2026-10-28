@@ -43,7 +43,7 @@ data class ParsedTimetable(
     val dayCount: Int = 7,
     /** 来源学校的名字，导入预览里显示。 */
     val schoolLabel: String = "",
-    /** 班级名，如"电力B261"。 */
+    /** 班级名，如"某班级"。 */
     val className: String = "",
 )
 
@@ -522,7 +522,7 @@ object TimetablePdfParser {
                 "(?:\\s*[-~－]\\s*\\d{1,2})?)*\\s*周(?:\\s*[（(]\\s*[单双]\\s*[)）])?",
         ).replace(head, "")
         head = Regex("\\d{1,2}\\s*周(?:\\s*[（(]\\s*[单双]\\s*[)）])?").replace(head, "")
-        for (w in WEEKDAYS + listOf("课表", "梁宇宸")) head = head.replace(w, "")
+        for (w in WEEKDAYS + listOf("课表", "某同学")) head = head.replace(w, "")
         head = Regex("^[^A-Za-z\\u4e00-\\u9fff(（]*").replace(head, "")
         head = Regex("[\\s/;；,，\\-－]+$").replace(head, "")
         return head.trim()
