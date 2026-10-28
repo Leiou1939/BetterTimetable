@@ -34,6 +34,7 @@ object PdfImport {
     fun toScheduleData(
         parsed: ParsedTimetable,
         previous: ScheduleData,
+        schoolId: String = previous.schoolId,
     ): ScheduleData {
         val courses = ArrayList<Course>()
         parsed.courses.forEach { c ->
@@ -55,8 +56,15 @@ object PdfImport {
             )
         }
 
-        // Make sure the clock times cover every period the new timetable uses.
-        val periods = ensurePeriods(previous.periods, parsed.maxPeriod)
+        // 文件自带作息（沈阳工程学院 .xls 每行都写着 08:20-10:00）就直接用它，
+        // 否则沿用用户设置并补齐到新用到的节次。
+        val periods = parsed.periods?.takeIf { it.isNotEmpty() }
+            ?: if (schoolId != previous.schoolId) {
+                // 换学校了：旧学校的作息（比如沈阳工程学院的 5 大节）不能带过来
+                Period.DEFAULT
+            } else {
+                ensurePeriods(previous.periods, parsed.maxPeriod)
+            }
 
         val student = if (parsed.studentName.isNotEmpty() || parsed.studentId.isNotEmpty()) {
             Student(
@@ -73,6 +81,8 @@ object PdfImport {
             student = student,
             totalWeeks = maxOf(previous.totalWeeks, maxWeek).coerceIn(1, 30),
             periods = periods,
+            dayCount = parsed.dayCount.coerceIn(5, 7),
+            schoolId = schoolId,
             courses = courses.sortedWith(
                 compareBy({ it.day }, { it.periodFrom }, { it.name }),
             ),

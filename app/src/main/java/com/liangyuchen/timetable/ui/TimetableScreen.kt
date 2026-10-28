@@ -130,6 +130,8 @@ fun TimetableScreen(
     var calendars by remember { mutableStateOf<List<CalendarAccount>>(emptyList()) }
     var syncPrefs by remember { mutableStateOf(SyncSettings.load(context)) }
     var syncing by remember { mutableStateOf(false) }
+    var showSchoolPicker by remember { mutableStateOf(false) }
+    var pendingSchool by remember { mutableStateOf(viewModel.importSchool) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
     var updateToInstall by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -157,7 +159,7 @@ fun TimetableScreen(
     val pdfPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        if (uri != null) viewModel.startImport(uri)
+        if (uri != null) viewModel.startImport(uri, pendingSchool)
     }
 
     /**
@@ -273,12 +275,8 @@ fun TimetableScreen(
                     }
                     // 窄屏时省掉「导入」（设置页里有同一入口），保证周次条不被挤
                     if (!compactBar) {
-                        IconButton(onClick = {
-                            pdfPicker.launch(
-                                arrayOf("application/pdf", "application/octet-stream", "*/*"),
-                            )
-                        }) {
-                            Icon(Icons.Filled.FileOpen, contentDescription = "导入课表 PDF")
+                        IconButton(onClick = { showSchoolPicker = true }) {
+                            Icon(Icons.Filled.FileOpen, contentDescription = "导入课表")
                         }
                     }
                     IconButton(onClick = {
@@ -405,9 +403,7 @@ fun TimetableScreen(
             },
             onImportPdf = {
                 showSettings = false
-                pdfPicker.launch(
-                    arrayOf("application/pdf", "application/octet-stream", "*/*"),
-                )
+                showSchoolPicker = true
             },
             onGoToCurrentWeek = {
                 viewModel.goToToday()
@@ -433,6 +429,18 @@ fun TimetableScreen(
             onCheckUpdate = {
                 showSettings = false
                 showUpdateDialog = true
+            },
+        )
+    }
+
+    if (showSchoolPicker) {
+        SchoolPickerDialog(
+            current = viewModel.importSchool,
+            onDismiss = { showSchoolPicker = false },
+            onPick = { school ->
+                showSchoolPicker = false
+                pendingSchool = school
+                pdfPicker.launch(school.sourceKind.mimeTypes)
             },
         )
     }
@@ -913,7 +921,7 @@ private fun SettingsDialog(
                 ) {
                     Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("导入课表 PDF（替换当前课表）", fontSize = 13.sp)
+                    Text("导入课表（替换当前课表）", fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(6.dp))
                 OutlinedButton(
@@ -928,7 +936,7 @@ private fun SettingsDialog(
                     )
                 }
                 Text(
-                    text = "选一份课表 PDF，程序会自动识别星期、节次、周次、场地与教师，" +
+                    text = "先选学校，再选文件：沈阳师范大学用 PDF，沈阳工程学院用教务导出的 .xls。" +
                         "确认后课表随新的 PDF 变化；开学日期与作息时间保持不变。",
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

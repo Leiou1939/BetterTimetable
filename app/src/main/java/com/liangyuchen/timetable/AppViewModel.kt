@@ -12,6 +12,8 @@ import com.liangyuchen.timetable.data.Period
 import com.liangyuchen.timetable.data.ScheduleCalc
 import com.liangyuchen.timetable.data.ScheduleData
 import com.liangyuchen.timetable.pdf.ParsedTimetable
+import com.liangyuchen.timetable.school.School
+import com.liangyuchen.timetable.school.SchoolImport
 import com.liangyuchen.timetable.pdf.PdfImport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,6 +39,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var importError: String? by mutableStateOf(null)
         private set
+    /** 这次导入选的是哪所学校。 */
+    var importSchool: School by mutableStateOf(School.fromId(data.schoolId))
+        private set
 
     val today: LocalDate = LocalDate.now()
 
@@ -54,16 +59,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ PDF 导入
 
-    /** 解析所选 PDF；结果放进 [importResult] 供界面预览确认。 */
-    fun startImport(uri: Uri) {
+    /** 解析所选文件（按学校分派解析方案）；结果放进 [importResult] 供界面预览确认。 */
+    fun startImport(uri: Uri, school: School = School.fromId(data.schoolId)) {
         importing = true
         importError = null
         importResult = null
+        importSchool = school
         viewModelScope.launch {
-            val parsed = withContext(Dispatchers.IO) { PdfImport.parse(appContext, uri) }
+            val parsed = withContext(Dispatchers.IO) {
+                SchoolImport.parse(appContext, uri, school)
+            }
             importing = false
             if (parsed.courses.isEmpty()) {
-                importError = parsed.warnings.firstOrNull() ?: "这个 PDF 里没有解析出课程"
+                importError = parsed.warnings.firstOrNull()
+                    ?: "这个文件里没有解析出课程（学校选对了吗？）"
             } else {
                 importResult = parsed
             }
@@ -79,10 +88,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         importError = null
     }
 
-    /** 确认导入：用解析结果替换课表，但保留开学日期与作息时间设置。 */
+    /** 确认导入：用解析结果替换课表；开学日期保留，作息按文件自带的时间同步。 */
     fun confirmImport() {
         val parsed = importResult ?: return
-        update(PdfImport.toScheduleData(parsed, data))
+        update(PdfImport.toScheduleData(parsed, data, importSchool.id))
         importResult = null
         week = weekOfToday()
     }

@@ -49,11 +49,12 @@ import java.time.LocalTime
 internal val ROW_HEIGHT = 51.dp
 private val HEADER_HEIGHT = 62.dp
 private val HEADER_HEIGHT_SMALL = 54.dp
+private val HEADER_MAX = 132.dp
 private val GRID_LINE_WIDTH = 1.dp
 
 /** 行高的上下界：太矮文字挤、太高界面松散（屏幕很高时才用得着上界）。 */
 private val ROW_MIN = 44.dp
-private val ROW_MAX = 96.dp
+private val ROW_MAX = 150.dp
 
 /**
  * 按可用高度均分各节次的行高，使表格正好填满屏幕、底部不留空白。
@@ -108,9 +109,9 @@ internal data class GridMetrics(
     val gridWidth: Dp get() = dayCol * 7
 }
 
-internal fun gridMetrics(available: Dp): GridMetrics {
+internal fun gridMetrics(available: Dp, days: Int = 7): GridMetrics {
     val timeCol = (available * 0.115f).coerceIn(TIME_COL_MIN, TIME_COL_MAX)
-    val raw = (available - timeCol) / 7
+    val raw = (available - timeCol) / days.coerceAtLeast(1)
     return GridMetrics(
         timeCol = timeCol,
         // 屏幕极窄时不再压缩，改为横向滚动，避免文字完全不可读
@@ -149,14 +150,22 @@ fun WeekGrid(
     }
 
     BoxWithConstraints(modifier = modifier) {
-        val metrics = gridMetrics(maxWidth)
+        val days = data.dayCount.coerceIn(1, 7)
+        val metrics = gridMetrics(maxWidth, days)
         // 纵向也自适应：把可用高度均分给各节次，避免表格下方留出空白。
         // 屏幕比「62dp 表头 + 10×51dp」矮时保持最小行高并允许滚动。
         val rowHeight = rowHeightFor(maxHeight, periods.size)
-        val headerHeight = if (maxHeight != Dp.Infinity && maxHeight < 520.dp) {
+        // 节次少（如沈阳工程学院只有 5 个大节）时，行高上限之外剩余的高度
+        // 交给表头吸收，避免表格下方又空出一块。
+        val minHeader = if (maxHeight != Dp.Infinity && maxHeight < 520.dp) {
             HEADER_HEIGHT_SMALL
         } else {
             HEADER_HEIGHT
+        }
+        val headerHeight = if (maxHeight == Dp.Infinity) {
+            HEADER_HEIGHT
+        } else {
+            (maxHeight - rowHeight * periods.size).coerceIn(minHeader, HEADER_MAX)
         }
         val gridHeight = rowHeight * periods.size
         val nowTop = remember(week, today, clockTick, rowHeight) {
@@ -229,6 +238,7 @@ fun WeekGrid(
                 Column {
                     DayHeaderRow(
                         data = data,
+                        days = days,
                         week = week,
                         monday = monday,
                         today = today,
@@ -246,7 +256,7 @@ fun WeekGrid(
                             .height(gridHeight),
                     ) {
                         DrawGridLines(periods.size, gridHeight, metrics.gridWidth, rowHeight)
-                        for (day in 0..6) {
+                        for (day in 0 until days) {
                             Box(
                                 modifier = Modifier
                                     .offset(x = metrics.dayCol * day)
@@ -343,6 +353,7 @@ private fun DrawGridLines(periodCount: Int, gridHeight: Dp, gridWidth: Dp, rowHe
 @Composable
 private fun DayHeaderRow(
     data: ScheduleData,
+    days: Int,
     week: Int,
     monday: LocalDate,
     today: LocalDate,
@@ -355,7 +366,7 @@ private fun DayHeaderRow(
     onSelectDay: (Int) -> Unit,
 ) {
     Row(modifier = Modifier.height(headerHeight)) {
-        for (day in 0..6) {
+        for (day in 0 until days) {
             val date = monday.plusDays(day.toLong())
             val isToday = date == today
             val isSelected = day == selectedDay

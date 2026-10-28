@@ -34,6 +34,17 @@ data class ParsedTimetable(
     val maxPeriod: Int = 10,
     val sourcePages: Int = 0,
     val warnings: List<String> = emptyList(),
+    /**
+     * 文件里自带作息时间时（沈阳工程学院的 .xls 每行都写着 08:20-10:00），
+     * 用它覆盖设置里的作息；为空表示沿用原来的。
+     */
+    val periods: List<com.liangyuchen.timetable.data.Period>? = null,
+    /** 课表里有几天（沈阳工程学院只排周一到周五）。 */
+    val dayCount: Int = 7,
+    /** 来源学校的名字，导入预览里显示。 */
+    val schoolLabel: String = "",
+    /** 班级名，如"电力B261"。 */
+    val className: String = "",
 )
 
 /**

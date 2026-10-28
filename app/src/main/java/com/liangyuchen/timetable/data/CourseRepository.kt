@@ -104,6 +104,8 @@ class CourseRepository(private val context: Context) {
                 totalWeeks = root.optInt("totalWeeks", 20).coerceIn(1, 30),
                 periods = if (periods.isEmpty()) Period.DEFAULT else periods,
                 courses = courses,
+                dayCount = root.optInt("dayCount", 7).coerceIn(5, 7),
+                schoolId = root.optString("schoolId", "synu"),
             )
         }.getOrNull()
 
@@ -119,6 +121,8 @@ class CourseRepository(private val context: Context) {
             )
             root.put("termStartDate", data.termStartDate)
             root.put("totalWeeks", data.totalWeeks)
+            root.put("dayCount", data.dayCount)
+            root.put("schoolId", data.schoolId)
 
             val periodsJson = JSONArray()
             for (p in data.periods) {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.liangyuchen.timetable.pdf.ParsedCourse
 import com.liangyuchen.timetable.pdf.ParsedTimetable
+import com.liangyuchen.timetable.school.School
 
 /** 解析中提示。 */
 @Composable
@@ -38,7 +40,7 @@ fun ImportProgressDialog() {
     AlertDialog(
         onDismissRequest = {},
         confirmButton = {},
-        title = { Text("正在解析课表 PDF…", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+        title = { Text("正在解析课表…", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 Text("首次解析包含全部课程与周次，请稍候。", fontSize = 12.sp)
@@ -173,4 +175,71 @@ private fun CoursePreviewRow(course: ParsedCourse, weekday: String) {
             }
         }
     }
+}
+
+/**
+ * 导入前先选学校：不同学校的课表格式不同，读表方案也不同。
+ */
+@Composable
+fun SchoolPickerDialog(
+    current: School,
+    onDismiss: () -> Unit,
+    onPick: (School) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("选择课表来源", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "不同学校的课表格式不同，选错会解析不出课程",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                School.entries.forEach { school ->
+                    val selected = school == current
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .clickable { onPick(school) },
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        },
+                        shape = MaterialTheme.shapes.small,
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    school.displayName,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    school.sourceKind.label,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                school.note,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

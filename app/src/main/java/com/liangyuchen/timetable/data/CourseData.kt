@@ -78,6 +78,10 @@ data class ScheduleData(
     val totalWeeks: Int = 20,
     val periods: List<Period> = Period.DEFAULT,
     val courses: List<Course> = emptyList(),
+    /** 课表里有几天：沈阳师范大学 7 天，沈阳工程学院 5 天。 */
+    val dayCount: Int = 7,
+    /** 课表来源学校（[com.liangyuchen.timetable.school.School.id]）。 */
+    val schoolId: String = "synu",
 ) {
     fun course(id: String): Course? = courses.firstOrNull { it.id == id }
 
