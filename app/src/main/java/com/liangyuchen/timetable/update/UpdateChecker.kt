@@ -129,7 +129,7 @@ object UpdateChecker {
         var lastError: Throwable? = null
         for ((url, isApi) in candidates) {
             try {
-                fetchTo(url, isApi, info.apkSize, target, onProgress)
+                fetchTo(url, info.apkSize, target, onProgress)
                 if (target.length() >= 100_000L) return target
                 lastError = IllegalStateException("下载到的文件不完整")
             } catch (t: Throwable) {
@@ -145,7 +145,6 @@ object UpdateChecker {
 
     private fun fetchTo(
         url: String,
-        isApiAsset: Boolean,
         expectedSize: Long,
         target: File,
         onProgress: (Long, Long) -> Unit,
