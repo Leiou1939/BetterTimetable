@@ -36,6 +36,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -133,6 +135,8 @@ fun WeekGrid(
     selectedDay: Int,
     onCourseClick: (Course) -> Unit,
     onSelectDay: (Int) -> Unit = {},
+    onPreviousWeek: () -> Unit = {},
+    onNextWeek: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val periods = data.periods
@@ -188,6 +192,29 @@ fun WeekGrid(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                // 左右滑动切周（只在 7 天已经放得下时启用，避免和横向滚动打架）
+                .then(
+                    if (metrics.fits) {
+                        Modifier.pointerInput(week) {
+                            val threshold = 64.dp.toPx()
+                            var dragged = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { dragged = 0f },
+                                onDragEnd = {
+                                    if (dragged > threshold) onPreviousWeek()
+                                    else if (dragged < -threshold) onNextWeek()
+                                    dragged = 0f
+                                },
+                                onHorizontalDrag = { change, amount ->
+                                    dragged += amount
+                                    change.consume()
+                                },
+                            )
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
                 .verticalScroll(vScroll),
         ) {
             // 左列：节次 + 上下课时间（永远不横向滚动）
@@ -425,6 +452,10 @@ private fun CourseBlock(
 ) {
     val span = (course.periodTo - course.periodFrom + 1).coerceAtLeast(1)
     val accent = colorFor(course.colorKey)
+    // 能放几行取决于格子的实际高度（而不是"跨几节"），这样大字块不会被省略号截掉
+    val usableHeight = (rowHeight * span - 12.dp).coerceAtLeast(18.dp)
+    val maxNameLines = (usableHeight / 13.dp).toInt().coerceIn(2, 8)
+    val maxRoomLines = ((usableHeight / 13.dp).toInt() / 3).coerceIn(1, 3)
     Surface(
         modifier = Modifier
             .offset(y = rowHeight * (course.periodFrom - 1))
@@ -444,7 +475,7 @@ private fun CourseBlock(
                 lineHeight = nameSize * 1.2f,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = if (span >= 2) 4 else 2,
+                maxLines = maxNameLines,
                 overflow = TextOverflow.Ellipsis,
             )
             if (course.room.isNotEmpty()) {
@@ -453,7 +484,7 @@ private fun CourseBlock(
                     fontSize = roomSize,
                     lineHeight = roomSize * 1.2f,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (span >= 2) 2 else 1,
+                    maxLines = maxRoomLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             }

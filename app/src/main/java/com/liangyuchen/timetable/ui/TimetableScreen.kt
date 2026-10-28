@@ -1,6 +1,8 @@
 package com.liangyuchen.timetable.ui
 
 import android.content.Context
+import androidx.compose.material.icons.filled.Code
+import android.net.Uri
 import android.content.Intent
 import android.provider.CalendarContract
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -351,6 +353,14 @@ fun TimetableScreen(
                         selectedDay = it
                         dayMode = true
                     },
+                    onPreviousWeek = {
+                        viewModel.previousWeek()
+                        selectedDay = ScheduleCalc.dayIndexOf(today)
+                    },
+                    onNextWeek = {
+                        viewModel.nextWeek()
+                        selectedDay = ScheduleCalc.dayIndexOf(today)
+                    },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -434,6 +444,17 @@ fun TimetableScreen(
             onCheckUpdate = {
                 showSettings = false
                 showUpdateDialog = true
+            },
+            onOpenRepo = {
+                val slug = UpdateChecker.repo(context)
+                val url = if (slug.contains('/')) "https://github.com/$slug" else
+                    "https://github.com"
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
             },
         )
     }
@@ -887,6 +908,7 @@ private fun SettingsDialog(
     onAutoSyncChange: (Boolean) -> Unit,
     onClearCalendarEvents: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onOpenRepo: () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     val pickerState = rememberDatePickerState(
@@ -979,6 +1001,12 @@ private fun SettingsDialog(
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("检查更新", fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = onOpenRepo, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("GitHub 仓库", fontSize = 13.sp)
                 }
 
                 Spacer(Modifier.height(14.dp))

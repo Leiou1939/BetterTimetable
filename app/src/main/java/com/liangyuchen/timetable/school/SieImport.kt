@@ -129,7 +129,12 @@ object SieImport {
             if (periodIndex <= 0 && start.isEmpty()) continue
             if (periodIndex <= 0) periodIndex = periods.size + 1
             if (start.isNotEmpty() && end.isNotEmpty()) {
-                periods += Period(periodIndex, normalize(start), normalize(end))
+                // 一个"大节"= 两个小节：把时间窗对半分，落成表格的两行
+                val s1 = normalize(start)
+                val e2 = normalize(end)
+                val mid = midpoint(s1, e2)
+                periods += Period(periodIndex * 2 - 1, s1, mid)
+                periods += Period(periodIndex * 2, mid, e2)
             }
 
             // 每一列：一门课
@@ -212,13 +217,18 @@ object SieImport {
         val room = others.lastOrNull { it.isNotBlank() } ?: ""
         val campus = if (room.startsWith("教学楼")) "教学楼" else ""
 
-        // 课表里的作息按"大节"排（每行一个大节，含起止时间），
-        // 而格子里写的是小节 [01-02] / [03-04] …，所以要换算成大节序号：
-        //   01-02 → 第 1 大节，03-04 → 第 2 大节，… 09-10 → 第 5 大节
-        val big = if (slotFrom > 0) (slotFrom + 1) / 2 else periodIndex
-        val bigTo = if (slotTo > 0) (slotTo + 1) / 2 else big
-        val from = if (big > 0) big else periodIndex
-        val to = if (bigTo >= from) bigTo else from
+        // 格子里写的是小节号 [01-02] / [03-04] …，直接对应表格的 1..10 行；
+        // 没写的话用"第 k 大节 → 第 2k-1、2k 节"推出来。
+        val from = when {
+            slotFrom > 0 -> slotFrom
+            periodIndex > 0 -> periodIndex * 2 - 1
+            else -> 1
+        }
+        val to = when {
+            slotTo > 0 && slotTo >= from -> slotTo
+            from % 2 == 1 -> from + 1
+            else -> from
+        }
 
         return ParsedCourse(
             name = name,
@@ -263,6 +273,21 @@ object SieImport {
             even -> distinct.filter { it % 2 == 0 }
             else -> distinct
         }
+    }
+
+    /** 两个时刻的中点，如 08:20 与 10:00 → 09:10。 */
+    private fun midpoint(start: String, end: String): String {
+        fun minutes(t: String): Int? {
+            val p = t.split(':')
+            if (p.size != 2) return null
+            val h = p[0].toIntOrNull() ?: return null
+            val m = p[1].toIntOrNull() ?: return null
+            return h * 60 + m
+        }
+        val a = minutes(start) ?: return start
+        val b = minutes(end) ?: return end
+        val mid = (a + b) / 2
+        return "%02d:%02d".format(mid / 60, mid % 60)
     }
 
     private fun cnToInt(text: String): Int =
