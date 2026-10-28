@@ -15,20 +15,23 @@ class CourseRepository(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** 读取课表：优先用户数据，没有就用内置课表。 */
+    /** 读取课表；首次安装返回空课表，由界面引导用户导入自己的课表。 */
     fun load(): ScheduleData {
         prefs.getString(KEY_DATA, null)?.let { json ->
             parse(json)?.let { return it }
         }
-        return parse(readAsset().toString(Charsets.UTF_8)) ?: ScheduleData()
+        return ScheduleData()
     }
+
+    /** 是否有用户保存过的课表（用来判断"首次进入"）。 */
+    fun hasSavedSchedule(): Boolean = prefs.contains(KEY_DATA)
 
     fun save(data: ScheduleData) {
         prefs.edit().putString(KEY_DATA, toJson(data).toString()).apply()
     }
 
-    /** 恢复内置课表。 */
-    fun reset() {
+    /** 清空课表数据。 */
+    fun clear() {
         prefs.edit().remove(KEY_DATA).apply()
     }
 

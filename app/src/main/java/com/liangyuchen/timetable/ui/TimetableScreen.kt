@@ -76,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -323,9 +324,13 @@ fun TimetableScreen(
                 .padding(innerPadding)
                 .windowInsetsPadding(WindowInsets.systemBars),
         ) {
-            // The grid draws its own weekday header, so there is no second week
-            // strip here — that row used to repeat the same dates twice.
-            if (dayMode) {
+            // 没有课表时先引导导入（首次安装进入就是这里）
+            if (!viewModel.hasCourses) {
+                EmptyScheduleGuide(
+                    onImport = { showSchoolPicker = true },
+                    modifier = Modifier.weight(1f),
+                )
+            } else if (dayMode) {
                 DayList(
                     data = data,
                     week = viewModel.week,
@@ -397,8 +402,8 @@ fun TimetableScreen(
             onTermStartChange = { viewModel.setTermStart(it) },
             onTotalWeeksChange = { viewModel.setTotalWeeks(it) },
             onPeriodChange = { index, start, end -> viewModel.setPeriodTime(index, start, end) },
-            onReset = {
-                viewModel.resetToBundled()
+            onClearTimetable = {
+                viewModel.clearCourses()
                 showSettings = false
             },
             onImportPdf = {
@@ -875,7 +880,7 @@ private fun SettingsDialog(
     onTermStartChange: (LocalDate) -> Unit,
     onTotalWeeksChange: (Int) -> Unit,
     onPeriodChange: (Int, String, String) -> Unit,
-    onReset: () -> Unit,
+    onClearTimetable: () -> Unit,
     onImportPdf: () -> Unit,
     onGoToCurrentWeek: () -> Unit,
     onReminderMinutesChange: (Int) -> Unit,
@@ -935,12 +940,6 @@ private fun SettingsDialog(
                         fontSize = 13.sp,
                     )
                 }
-                Text(
-                    text = "先选学校，再选文件：沈阳师范大学用 PDF，沈阳工程学院用教务导出的 .xls。" +
-                        "确认后课表随新的 PDF 变化；开学日期与作息时间保持不变。",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Spacer(Modifier.height(12.dp))
 
                 Text(
@@ -955,12 +954,6 @@ private fun SettingsDialog(
                         fontSize = 14.sp,
                     )
                 }
-                Text(
-                    text = "当前策略：第 1 周周一 = 上面这一天。" +
-                        "第 5 周周一 = ${ScheduleCalc.mondayOfWeek(data, 5)}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Spacer(Modifier.height(12.dp))
 
                 Text("学期总周数：${data.totalWeeks}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -981,12 +974,6 @@ private fun SettingsDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(10.dp))
                 Text("关于与更新", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = "版本 ${UpdateChecker.localVersionName()}" +
-                        "（${UpdateChecker.localVersionCode()}）· 更新来自 GitHub Releases",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 Spacer(Modifier.height(4.dp))
                 OutlinedButton(onClick = onCheckUpdate, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -998,20 +985,7 @@ private fun SettingsDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(10.dp))
                 Text("日历提醒", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = if (sync.hasCalendar) {
-                        "写入日历：${sync.calendarName}（同步时会先清掉上次写入的日程，不会重复）"
-                    } else {
-                        "还没有选择日历。点右上角的「同步」图标选一次即可，之后会记住。"
-                    },
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "提前提醒：" + if (sync.reminderMinutes == 0) "不提醒" else "${sync.reminderMinutes} 分钟",
-                    fontSize = 11.sp,
-                )
+                Spacer(Modifier.height(4.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
@@ -1043,7 +1017,7 @@ private fun SettingsDialog(
                 }
 
                 Spacer(Modifier.height(12.dp))
-                Text("作息时间（可在下方逐节修改）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("作息时间", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 data.periods.sortedBy { it.index }.forEach { period ->
                     Row(
@@ -1070,7 +1044,7 @@ private fun SettingsDialog(
             Button(onClick = onDismiss) { Text("完成") }
         },
         dismissButton = {
-            TextButton(onClick = onReset) { Text("恢复内置课表") }
+            TextButton(onClick = onClearTimetable) { Text("清空课表") }
         },
     )
 }
@@ -1138,6 +1112,42 @@ internal fun openSystemCalendar(context: Context) {
         if (context.packageManager.resolveActivity(intent, 0) != null) {
             runCatching { context.startActivity(intent) }
             return
+        }
+    }
+}
+
+/** 首次进入 / 清空课表后的引导：一句话说明 + 导入按钮。 */
+@Composable
+private fun EmptyScheduleGuide(onImport: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            Icons.Filled.CalendarMonth,
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "还没有课表",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "导入你的课表文件，之后会自动同步到手机日历并在到点提醒。",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onImport) {
+            Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("导入课表")
         }
     }
 }

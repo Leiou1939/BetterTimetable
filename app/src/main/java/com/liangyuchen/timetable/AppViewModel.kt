@@ -115,12 +115,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         update(data.copy(periods = periods))
     }
 
-    /** 恢复内置课表（也就是恢复到最初那份 PDF 解析出来的课表）。 */
-    fun resetToBundled() {
-        repository.reset()
-        data = repository.load()
-        week = weekOfToday()
+    /** 清空课表：课程清掉，开学日期与作息时间保留。 */
+    fun clearCourses() {
+        update(data.copy(courses = emptyList()))
+        week = 1
     }
+
+    /** 课表是否为空（用来显示首次导入引导）。 */
+    val hasCourses: Boolean get() = data.courses.isNotEmpty()
 
     private fun update(next: ScheduleData) {
         data = next

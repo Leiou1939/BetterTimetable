@@ -224,16 +224,10 @@ fun SchoolPickerDialog(
                                 )
                                 Text(
                                     school.sourceKind.label,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                             }
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                school.note,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }

@@ -9,7 +9,7 @@ import com.liangyuchen.timetable.pdf.PdfImport
 enum class SourceKind(val mimeTypes: Array<String>, val label: String) {
     PDF(
         arrayOf("application/pdf", "application/octet-stream", "*/*"),
-        "PDF 课表",
+        "PDF",
     ),
     EXCEL(
         arrayOf(
@@ -19,7 +19,7 @@ enum class SourceKind(val mimeTypes: Array<String>, val label: String) {
             "application/octet-stream",
             "*/*",
         ),
-        "Excel 课表（.xls）",
+        "Excel",
     ),
 }
 

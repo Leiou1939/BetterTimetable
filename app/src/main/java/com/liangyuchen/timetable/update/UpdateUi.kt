@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /** 更新流程的状态机。 */
 private sealed interface UpdateState {
@@ -47,8 +46,8 @@ private sealed interface UpdateState {
     data object Checking : UpdateState
     data class Latest(val version: String) : UpdateState
     data class Found(val info: UpdateInfo) : UpdateState
-    data class Downloading(val percent: Int, val bytes: Long, val total: Long) : UpdateState
-    data class Ready(val info: UpdateInfo, val apk: File) : UpdateState
+    /** 已交给前台服务在后台下载，进度看通知栏。 */
+    data object InBackground : UpdateState
     data class Failed(val message: String) : UpdateState
 }
 
@@ -125,20 +124,13 @@ fun UpdateDialog(
     var started by remember { mutableStateOf(false) }
 
     fun startDownload(info: UpdateInfo) {
-        state = UpdateState.Downloading(0, 0, info.apkSize)
-        scope.launch {
-            try {
-                val apk = withContext(Dispatchers.IO) {
-                    UpdateChecker.downloadApk(context, info) { done, total ->
-                        val pct = if (total > 0) ((done * 100) / total).toInt() else 0
-                        state = UpdateState.Downloading(pct, done, total)
-                    }
-                }
-                state = UpdateState.Ready(info, apk)
-            } catch (t: Throwable) {
-                state = UpdateState.Failed("下载失败：${t.message ?: t.javaClass.simpleName}")
+        runCatching { UpdateDownloadService.start(context, info) }
+            .onSuccess { state = UpdateState.InBackground }
+            .onFailure {
+                state = UpdateState.Failed(
+                    "无法启动后台下载：${it.message ?: it.javaClass.simpleName}",
+                )
             }
-        }
     }
 
     fun startCheck() {
@@ -262,6 +254,12 @@ fun UpdateDialog(
                             )
                         }
                         Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "GitHub 在国内下载可能较慢，建议点「下载并安装」后转到后台，看通知栏进度。",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Text("更新内容", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -273,49 +271,26 @@ fun UpdateDialog(
                         )
                     }
 
-                    is UpdateState.Downloading -> {
-                        Text("正在下载… ${s.percent}%", fontSize = 12.sp)
-                        Spacer(Modifier.height(6.dp))
-                        if (s.total > 0) {
-                            LinearProgressIndicator(
-                                progress = { s.percent / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        } else {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        }
+                    is UpdateState.InBackground -> {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(10.dp))
+                        Text("已转入后台下载", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "${s.bytes / 1024} KB / " +
-                                if (s.total > 0) "${s.total / 1024} KB" else "未知",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = "进度看通知栏；可以退出 App，下载完点通知即可安装。",
+                            fontSize = 12.sp,
                         )
-                    }
-
-                    is UpdateState.Ready -> {
-                        Text("已下载 ${s.info.tag}，准备安装。", fontSize = 12.sp)
-                        Spacer(Modifier.height(6.dp))
                         if (!ApkInstaller.canInstall(context)) {
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                text = "需要先允许「课程表」安装未知来源应用。",
-                                fontSize = 11.sp,
+                                text = "手机还没允许「课程表」安装应用，装之前要先打开这个开关。",
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { ApkInstaller.openInstallPermission(context) },
-                                ) { Text("去开启权限", fontSize = 12.sp) }
-                                Button(onClick = { ApkInstaller.install(context, s.apk) }) {
-                                    Text("重新安装", fontSize = 12.sp)
-                                }
-                            }
-                        } else {
-                            Button(
-                                onClick = { ApkInstaller.install(context, s.apk) },
+                            OutlinedButton(
+                                onClick = { ApkInstaller.openInstallPermission(context) },
                                 modifier = Modifier.fillMaxWidth(),
-                            ) { Text("安装更新") }
+                            ) { Text("去开启安装权限") }
                         }
                     }
                 }
@@ -328,14 +303,12 @@ fun UpdateDialog(
                     Text("下载并安装")
                 }
 
-                is UpdateState.Ready -> Button(onClick = { ApkInstaller.install(context, s.apk) }) {
-                    Text("安装")
-                }
-
-                is UpdateState.Checking, is UpdateState.Downloading -> Button(
+                is UpdateState.Checking -> Button(
                     onClick = {},
                     enabled = false,
                 ) { Text("请稍候") }
+
+                is UpdateState.InBackground -> Button(onClick = onDismiss) { Text("知道了") }
 
                 is UpdateState.Failed -> Button(onClick = { startCheck() }) { Text("重试") }
 

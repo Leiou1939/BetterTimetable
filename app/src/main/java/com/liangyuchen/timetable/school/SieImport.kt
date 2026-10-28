@@ -149,7 +149,8 @@ object SieImport {
             warnings += "没有解析出任何课程"
         }
 
-        val dayCount = (dayCols.values.maxOrNull() ?: 4) + 1
+        // 工程学院只排到周五，但周视图保留周六周日两列
+        val dayCount = 7
         return ParsedTimetable(
             courses = courses.sortedWith(compareBy({ it.day }, { it.periodFrom }, { it.name })),
             term = termText,
