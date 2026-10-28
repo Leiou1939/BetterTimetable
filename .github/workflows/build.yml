@@ -1,0 +1,46 @@
+# 推送到 GitHub 后自动编译出 APK，产物在 Actions 页面的 Artifacts 里下载。
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: 编译 debug 与 release APK
+        run: gradle assembleDebug assembleRelease --stacktrace
+
+      - name: 收集 APK
+        run: |
+          mkdir -p dist
+          find app/build/outputs/apk -name '*.apk' -print -exec cp {} dist/ \;
+          ls -lh dist
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: timetable-apk
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 90

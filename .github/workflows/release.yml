@@ -1,0 +1,71 @@
+# 推送（或打 tag）就自动编译 + 发布 GitHub Release，App 内的「检查更新」会读到这个 Release。
+#
+# 版本号策略（三处必须一致，否则 App 判断不出"有新版"）：
+#   BUILD_NO    = 本次运行序号（单调递增）
+#   versionCode = 1000 + BUILD_NO      ← App 内比较用的是这个
+#   versionName = 1.BUILD_NO           ← 显示给人看
+#   tag         = v1.0.(1000+BUILD_NO) ← App 取 tag 最后一段数字，正好等于 versionCode
+name: Build & Release
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: 计算版本号
+        id: version
+        run: |
+          BUILD_NO=${{ github.run_number }}
+          CODE=$((1000 + BUILD_NO))
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+          echo "name=1.$BUILD_NO" >> $GITHUB_OUTPUT
+          echo "tag=v1.0.$CODE" >> $GITHUB_OUTPUT
+          echo "本次版本：1.$BUILD_NO（versionCode $CODE，tag v1.0.$CODE）"
+
+      - name: 编译 release APK
+        # updateRepo 决定 App 内「检查更新」去哪个仓库找 Release
+        run: |
+          gradle assembleRelease --stacktrace \
+            -PappVersionCode=${{ steps.version.outputs.code }} \
+            -PappVersionName=${{ steps.version.outputs.name }} \
+            -PupdateRepo=${{ github.repository }}
+
+      - name: 准备发布文件
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk \
+             "dist/课程表-${{ steps.version.outputs.name }}.apk"
+          ls -lh dist
+
+      - name: 发布 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          NOTES="自动构建于 $(date -u '+%Y-%m-%d %H:%M UTC')，提交 ${{ github.sha }}。安装后可在「设置 → 检查更新」直接升级。"
+          gh release create "$TAG" dist/*.apk \
+            --title "课程表 $VERSION_NAME" \
+            --notes "$NOTES" \
+          || gh release upload "$TAG" dist/*.apk --clobber

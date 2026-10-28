@@ -1,0 +1,26 @@
+# 构建产物
+build/
+*/build/
+.gradle/
+.gradle-cache/
+captures/
+dist/
+
+# 本机配置（与本机路径相关，不要提交）
+local.properties
+keystore.properties
+
+# 只排除正式签名文件；keystore/debug.keystore **必须提交**，
+# 否则 CI 打出的 APK 与手机上已装的签名不一致，应用内更新会因签名冲突装不上。
+*.jks
+*.keystore
+!keystore/debug.keystore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
