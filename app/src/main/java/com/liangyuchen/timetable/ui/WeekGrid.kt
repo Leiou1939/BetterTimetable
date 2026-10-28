@@ -193,28 +193,6 @@ fun WeekGrid(
             modifier = Modifier
                 .fillMaxWidth()
                 // 左右滑动切周（只在 7 天已经放得下时启用，避免和横向滚动打架）
-                .then(
-                    if (metrics.fits) {
-                        Modifier.pointerInput(week) {
-                            val threshold = 64.dp.toPx()
-                            var dragged = 0f
-                            detectHorizontalDragGestures(
-                                onDragStart = { dragged = 0f },
-                                onDragEnd = {
-                                    if (dragged > threshold) onPreviousWeek()
-                                    else if (dragged < -threshold) onNextWeek()
-                                    dragged = 0f
-                                },
-                                onHorizontalDrag = { change, amount ->
-                                    dragged += amount
-                                    change.consume()
-                                },
-                            )
-                        }
-                    } else {
-                        Modifier
-                    },
-                )
                 .verticalScroll(vScroll),
         ) {
             // 左列：节次 + 上下课时间（永远不横向滚动）
@@ -255,9 +233,30 @@ fun WeekGrid(
             }
 
             // 右侧：星期表头 + 课程网格（同一滚动容器）
+            // 左右滑动切周只加在这一块上——左边的时间列保持不动。
+            val weekSwipe = if (metrics.fits) {
+                Modifier.pointerInput(week) {
+                    val threshold = 64.dp.toPx()
+                    var dragged = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragged = 0f },
+                        onDragEnd = {
+                            if (dragged > threshold) onPreviousWeek()
+                            else if (dragged < -threshold) onNextWeek()
+                            dragged = 0f
+                        },
+                        onHorizontalDrag = { change, amount ->
+                            dragged += amount
+                            change.consume()
+                        },
+                    )
+                }
+            } else {
+                Modifier
+            }
             Row(
                 modifier = if (metrics.fits) {
-                    Modifier
+                    weekSwipe
                 } else {
                     Modifier.horizontalScroll(hScroll)
                 },
