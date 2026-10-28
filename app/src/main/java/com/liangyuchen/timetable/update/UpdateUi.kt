@@ -61,6 +61,8 @@ fun UpdateDialog(context: Context, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var repo by remember { mutableStateOf(UpdateChecker.repo(context)) }
     var state by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    /** 记住了上一次查到的 Release 页面，下载失败时可以手动去下。 */
+    var latestHtmlUrl by remember { mutableStateOf<String?>(null) }
 
     val startCheck: () -> Unit = remember(context, repo) {
         {
@@ -74,6 +76,7 @@ fun UpdateDialog(context: Context, onDismiss: () -> Unit) {
                     if (info == null) {
                         UpdateState.Latest(UpdateChecker.localVersionName())
                     } else {
+                        latestHtmlUrl = info.htmlUrl
                         UpdateState.Found(info)
                     }
                 } catch (t: Throwable) {
@@ -149,11 +152,33 @@ fun UpdateDialog(context: Context, onDismiss: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    is UpdateState.Failed -> Text(
-                        text = s.message,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    is UpdateState.Failed -> {
+                        Text(
+                            text = s.message,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "也可以到 GitHub 页面手动下载安装包：",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                val url = latestHtmlUrl ?: "https://github.com/${UpdateChecker.repo(context)}/releases"
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(url),
+                                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("在浏览器中打开发布页", fontSize = 12.sp) }
+                    }
 
                     is UpdateState.Found -> {
                         Text(

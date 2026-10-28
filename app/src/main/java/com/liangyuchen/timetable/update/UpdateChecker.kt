@@ -116,18 +116,18 @@ object UpdateChecker {
         dir.listFiles()?.forEach { it.delete() }
         val target = File(dir, "timetable-${info.tag}.apk")
 
-        val candidates = ArrayList<Pair<String, Boolean>>()   // url to (是否 API 二进制接口)
+        val candidates = ArrayList<String>()
         // API 接口优先：国内网络里 github.com 常常整个连不上，
         // 而 api.github.com 会 302 到 release-assets.githubusercontent.com（可达）。
         val slug = repo(context)
         if (info.apkAssetId > 0L && slug.contains('/')) {
-            candidates += "$API/repos/$slug/releases/assets/${info.apkAssetId}" to true
+            candidates += "$API/repos/$slug/releases/assets/${info.apkAssetId}"
         }
-        if (info.apkUrl.isNotEmpty()) candidates += info.apkUrl to false
+        if (info.apkUrl.isNotEmpty()) candidates += info.apkUrl
         if (candidates.isEmpty()) throw IllegalStateException("没有可用的下载地址")
 
         var lastError: Throwable? = null
-        for ((url, isApi) in candidates) {
+        for (url in candidates) {
             try {
                 fetchTo(url, info.apkSize, target, onProgress)
                 if (target.length() >= 100_000L) return target
