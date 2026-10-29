@@ -38,6 +38,12 @@ enum class School(
         sourceKind = SourceKind.PDF,
         note = "教务 PDF 课表；节次时间不含在文件里，用 App 内置作息（可在设置里改）。",
     ),
+    SAU(
+        id = "sau",
+        displayName = "沈阳航空航天大学",
+        sourceKind = SourceKind.PDF,
+        note = "教务 PDF 课表，版式与沈阳师范大学相同，用同一套解析。",
+    ),
     SIE(
         id = "sie",
         displayName = "沈阳工程学院",
@@ -56,7 +62,8 @@ enum class School(
 object SchoolImport {
 
     fun parse(context: Context, uri: Uri, school: School): ParsedTimetable = when (school) {
-        School.SYNU -> PdfImport.parse(context, uri)
+        // 沈师大与沈航的教务 PDF 版式一致，共用 PDF 解析
+        School.SYNU, School.SAU -> PdfImport.parse(context, uri)
         School.SIE -> parseExcel(context, uri)
     }
 

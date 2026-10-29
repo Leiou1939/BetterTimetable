@@ -142,8 +142,16 @@ object UpdateChecker {
         onProgress: (downloaded: Long, total: Long) -> Unit,
     ): File {
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
         val target = File(dir, "timetable-${info.tag}.apk")
+        // 这个版本已经下过就用本地的，不重复下载
+        if (target.exists() && target.length() >= 100_000L &&
+            (info.apkSize <= 0L || target.length() == info.apkSize)
+        ) {
+            onProgress(target.length(), target.length())
+            return target
+        }
+        // 其它版本的旧包清掉，避免缓存里堆一堆
+        dir.listFiles()?.forEach { if (it.absolutePath != target.absolutePath) it.delete() }
 
         val candidates = ArrayList<String>()
         // API 接口优先：国内网络里 github.com 常常整个连不上，

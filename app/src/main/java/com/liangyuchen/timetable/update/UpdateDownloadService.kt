@@ -33,6 +33,7 @@ class UpdateDownloadService : Service() {
 
     private var scope: CoroutineScope? = null
 
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -42,6 +43,9 @@ class UpdateDownloadService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val tag = intent?.getStringExtra(EXTRA_TAG) ?: return stopNow()
+        // 已经在下载了：直接忽略这次请求，避免下出多个包
+        if (running) return START_NOT_STICKY
+        running = true
         val info = UpdateInfo(
             tag = tag,
             versionCode = intent.getIntExtra(EXTRA_VERSION_CODE, 0),
@@ -83,6 +87,7 @@ class UpdateDownloadService : Service() {
             } catch (t: Throwable) {
                 onFailed(t.message ?: t.javaClass.simpleName)
             } finally {
+                running = false
                 s.cancel()
             }
         }
@@ -92,6 +97,7 @@ class UpdateDownloadService : Service() {
     override fun onDestroy() {
         scope?.cancel()
         scope = null
+        running = false
         super.onDestroy()
     }
 
@@ -232,11 +238,16 @@ class UpdateDownloadService : Service() {
     }
 
     private fun stopNow(): Int {
+        running = false
         stopSelf()
         return START_NOT_STICKY
     }
 
     companion object {
+        /** 已经有一个下载在跑（防止连点/重进界面又下一遍）。 */
+        @Volatile
+        private var running = false
+
         private const val CHANNEL_ID = "update_download"
         private const val NOTIF_ID = 0x51ED
         private const val EXTRA_TAG = "tag"
@@ -247,8 +258,12 @@ class UpdateDownloadService : Service() {
         private const val EXTRA_VERSION_CODE = "version_code"
         private const val EXTRA_HTML = "html"
 
-        /** 在后台开始下载（界面只负责调用这个）。 */
+        /** 是否已有下载在跑。 */
+        fun isRunning(): Boolean = running
+
+        /** 在后台开始下载（界面只负责调用这个）；已在下载时直接忽略。 */
         fun start(context: Context, info: UpdateInfo) {
+            if (running) return
             val intent = Intent(context, UpdateDownloadService::class.java).apply {
                 putExtra(EXTRA_TAG, info.tag)
                 putExtra(EXTRA_TITLE, info.title)
