@@ -131,7 +131,70 @@ object TimetablePdfParser {
         return out.toByteArray()
     }
 
-    private fun decodeText(raw: ByteArray, cmap: String): String {
+    /** 解一个 Tj 的操作数：(字面量) 或 <十六进制>。 */
+    private fun decodeOperand(
+        line: String,
+        unicode: Map<Int, String>?,
+        cmap: String,
+    ): String {
+        val hexStart = line.indexOf('<')
+        val hexEnd = line.indexOf('>')
+        if (hexStart >= 0 && hexEnd > hexStart) {
+            return decodeText(hexToBytes(line.substring(hexStart + 1, hexEnd)), cmap, unicode)
+        }
+        val open = line.indexOf('(')
+        val close = line.lastIndexOf(')')
+        if (open >= 0 && close > open) {
+            return decodeText(decodeEscaped(line.substring(open + 1, close)), cmap, unicode)
+        }
+        return ""
+    }
+
+    private fun hexToBytes(hex: String): ByteArray {
+        val clean = hex.filter { it.isLetterOrDigit() }
+        if (clean.isEmpty()) return ByteArray(0)
+        val even = if (clean.length % 2 == 0) clean else clean.dropLast(1)
+        return ByteArray(even.length / 2) {
+            even.substring(it * 2, it * 2 + 2).toIntOrNull(16)?.toByte() ?: 0
+        }
+    }
+
+    private fun decodeText(raw: ByteArray, cmap: String): String = decodeText(raw, cmap, null)
+
+    private fun decodeText(
+        raw: ByteArray,
+        cmap: String,
+        unicode: Map<Int, String>?,
+    ): String {
+        // 有 ToUnicode 表时，按表逐码查（通常是 2 字节 CID）
+        if (unicode != null && unicode.isNotEmpty()) {
+            val wide = unicode.keys.any { it > 0xFF }
+            val sb = StringBuilder()
+            var i = 0
+            while (i < raw.size) {
+                val code: Int
+                val step: Int
+                if (wide && i + 1 < raw.size) {
+                    code = ((raw[i].toInt() and 0xFF) shl 8) or (raw[i + 1].toInt() and 0xFF)
+                    step = 2
+                } else {
+                    code = raw[i].toInt() and 0xFF
+                    step = 1
+                }
+                val mapped = unicode[code]
+                if (mapped != null) {
+                    sb.append(mapped)
+                } else if (step == 2 && code != 0) {
+                    sb.append('\uFFFD')
+                }
+                i += step
+            }
+            if (sb.isNotEmpty()) return sb.toString()
+        }
+        return decodeTextLegacy(raw, cmap)
+    }
+
+    private fun decodeTextLegacy(raw: ByteArray, cmap: String): String {
         val twoByte = cmap.contains("UCS2", true) || cmap.contains("UTF16", true) ||
             cmap.startsWith("Identity") || cmap.startsWith("Uni") ||
             cmap.contains("GBK", true) || cmap.contains("GB-EUC", true)
@@ -145,10 +208,44 @@ object TimetablePdfParser {
 
     // ------------------------------------------------------------- text runs
 
+    /**
+     * 有些教务 PDF 是「每个字一个 Tm」，抽出来是一堆单字。
+     * 把同一行、位置相邻的片段拼成短语，后面的卡片识别才用得上。
+     */
+    private fun mergeRuns(runs: List<TextRun>): List<TextRun> {
+        if (runs.size < 2) return runs
+        // 只有"绝大部分片段只有 1-2 个字"时才认为是逐字排版；
+        // 正常 PDF 已经按词/句给出片段，不需要也不应该再合。
+        val shortRuns = runs.count { it.text.trim().length <= 2 }
+        if (shortRuns * 10 < runs.size * 6) return runs
+        val sorted = runs.sortedWith(compareByDescending<TextRun> { it.y }.thenBy { it.x })
+        val out = ArrayList<TextRun>(sorted.size)
+        var cur: TextRun? = null
+        for (r in sorted) {
+            val c = cur
+            if (c == null) {
+                cur = r
+                continue
+            }
+            val sameLine = kotlin.math.abs(c.y - r.y) <= c.size * 0.6
+            val gap = r.x - c.x
+            val joined = sameLine && gap <= c.size * 1.35 && gap > -c.size
+            if (joined) {
+                cur = TextRun(c.x, c.y, c.size, c.text + r.text)
+            } else {
+                out += c
+                cur = r
+            }
+        }
+        cur?.let { out += it }
+        return out
+    }
+
     private fun extractRuns(
         content: ByteArray,
         defaultCmap: String,
         fontCmaps: Map<String, String>,
+        fontUnicode: Map<String, Map<Int, String>> = emptyMap(),
     ): List<TextRun> {
         val text = String(content, Charsets.ISO_8859_1)
         val runs = ArrayList<TextRun>(256)
@@ -156,6 +253,7 @@ object TimetablePdfParser {
         var y = 0.0
         var size = 12.0
         var cmap = defaultCmap
+        var unicode: Map<Int, String>? = null
 
         for (line in text.lineSequence()) {
             val trimmed = line.trim()
@@ -170,18 +268,17 @@ object TimetablePdfParser {
 
             TF_RE.find(trimmed)?.let { m ->
                 size = m.groupValues[2].toDoubleOrNull() ?: size
-                cmap = fontCmaps[m.groupValues[1]] ?: defaultCmap
+                val fontName = m.groupValues[1]
+                cmap = fontCmaps[fontName] ?: defaultCmap
+                // 有 ToUnicode 就以它为准（Type0 字体的字形编号只能这么解）
+                unicode = fontUnicode[fontName]
                 return@let
             }
             if (TF_RE.containsMatchIn(trimmed)) continue
 
             if (trimmed.endsWith("Tj")) {
-                val open = trimmed.indexOf('(')
-                val close = trimmed.lastIndexOf(')')
-                if (open >= 0 && close > open) {
-                    val raw = decodeEscaped(trimmed.substring(open + 1, close))
-                    runs += TextRun(x, y, size, decodeText(raw, cmap))
-                }
+                val decoded = decodeOperand(trimmed, unicode, cmap)
+                if (decoded.isNotEmpty()) runs += TextRun(x, y, size, decoded)
                 continue
             }
             if (trimmed.endsWith("TJ")) {
@@ -189,8 +286,16 @@ object TimetablePdfParser {
                 val close = trimmed.lastIndexOf(']')
                 if (open >= 0 && close > open) {
                     val sb = StringBuilder()
-                    for (sm in ARRAY_STRING_RE.findAll(trimmed.substring(open + 1, close))) {
-                        sb.append(decodeText(decodeEscaped(sm.groupValues[1]), cmap))
+                    val inner = trimmed.substring(open + 1, close)
+                    // 数组里既有 (字面量) 也有 <十六进制>
+                    for (tok in TJ_TOKEN_RE.findAll(inner)) {
+                        val literal = tok.groupValues[1]
+                        val hex = tok.groupValues[2]
+                        if (literal.isNotEmpty()) {
+                            sb.append(decodeText(decodeEscaped(literal), cmap, unicode))
+                        } else if (hex.isNotEmpty()) {
+                            sb.append(decodeText(hexToBytes(hex), cmap, unicode))
+                        }
                     }
                     if (sb.isNotEmpty()) runs += TextRun(x, y, size, sb.toString())
                 }
@@ -199,6 +304,7 @@ object TimetablePdfParser {
         return runs
     }
 
+    private val TJ_TOKEN_RE = Regex("\\(((?:[^()\\\\]|\\\\.)*)\\)|<([0-9A-Fa-f\\s]+)>")
     private val TM_RE = Regex("^1 0 0 1 (-?[\\d.]+) (-?[\\d.]+) Tm$")
     private val TF_RE = Regex("^/([A-Za-z0-9]+)\\s+([\\d.]+)\\s+Tf$")
     private val ARRAY_STRING_RE = Regex("\\(((?:[^()\\\\]|\\\\.)*)\\)")
@@ -232,6 +338,29 @@ object TimetablePdfParser {
 
     // --------------------------------------------------------------- parsing
 
+    /**
+     * 调试用：把 PDF 里的文字按 "x\ty\t文字" 原样导出来。
+     * 接入新学校时用来逆向版式，不影响正常解析。
+     */
+    internal fun dumpText(bytes: ByteArray): List<String> {
+        val doc = PdfDocument(bytes)
+        val defaultCmap = doc.defaultCmap() ?: "UniGB-UCS2-H"
+        val fontCmaps = doc.resourceCmaps().ifEmpty { mapOf("F1" to defaultCmap) }
+        val fontUnicode = doc.fontToUnicode()
+        val out = ArrayList<String>()
+        for ((_, contentObj) in doc.pages()) {
+            val content = doc.stream(contentObj)
+            if (content.isEmpty()) continue
+            out += "=== page ==="
+            mergeRuns(extractRuns(content, defaultCmap, fontCmaps, fontUnicode))
+                .sortedWith(compareByDescending<TextRun> { it.y }.thenBy { it.x })
+                .forEach { r ->
+                    out += "%.1f\t%.1f\t%s".format(r.x, r.y, r.text.replace("\n", "\\n"))
+                }
+        }
+        return out
+    }
+
     fun parse(bytes: ByteArray): ParsedTimetable {
         val doc = PdfDocument(bytes)
         val defaultCmap = doc.defaultCmap() ?: "UniGB-UCS2-H"
@@ -239,15 +368,18 @@ object TimetablePdfParser {
             // some files name their fonts nowhere useful; fall back to F1
             mapOf("F1" to defaultCmap)
         }
+        val fontUnicode = doc.fontToUnicode()
 
         val warnings = ArrayList<String>()
         val pages = ArrayList<PageData>()
         val allRuns = ArrayList<TextRun>()
+        var drawOps = 0   // 页面上画图片(XObject)的次数，用来判断"课表是截图"
+
 
         for ((_, contentObj) in doc.pages()) {
             val content = doc.stream(contentObj)
             if (content.isEmpty()) continue
-            val runs = extractRuns(content, defaultCmap, fontCmaps)
+            val runs = mergeRuns(extractRuns(content, defaultCmap, fontCmaps, fontUnicode))
             val rects = IMAGE_RE.findAll(String(content, Charsets.ISO_8859_1))
                 .map { m ->
                     Rect(
@@ -258,6 +390,7 @@ object TimetablePdfParser {
                     )
                 }
                 .toList()
+            drawOps += Regex("\\bDo\\b").findAll(String(content, Charsets.ISO_8859_1)).count()
             pages += PageData(runs, rects)
             allRuns += runs
         }
@@ -268,10 +401,19 @@ object TimetablePdfParser {
         // ---- columns from the weekday header ----
         val header = allRuns.filter { it.text.trim() in WEEKDAY_SET }
         if (header.isEmpty()) {
+            // 页面上有整页大图、却没有多少文字 → 课表是截图/扫描的
+            // 有整页图片(Do)、但文字很少 → 课表是截图/扫描
+            val looksLikeImage = drawOps > 0 && allRuns.size < 80
+            val message = if (looksLikeImage) {
+                "这份 PDF 的课表是图片（扫描或截图导出），里面没有文字层，App 读不出来。" +
+                    "请在教务系统里导出 Excel 或网页版课表，再用「导入课表」选对应学校。"
+            } else {
+                "没有找到“星期一…星期日”表头，这似乎不是课表 PDF"
+            }
             return ParsedTimetable(
                 emptyList(),
                 sourcePages = pages.size,
-                warnings = listOf("没有找到“星期一…星期日”表头，这似乎不是课表 PDF"),
+                warnings = listOf(message),
             )
         }
         val columns = LinkedHashMap<Int, Double>()   // day -> center x

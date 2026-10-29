@@ -149,6 +149,88 @@ internal class PdfDocument(val bytes: ByteArray) {
      * content stream to font objects, so a file with several fonts (some CID,
      * some simple) is decoded correctly instead of falling back to one default.
      */
+    /** 每个字体资源名 → 字体对象号，例如 F1 → 12。 */
+    fun fontObjects(): Map<String, Int> {
+        val out = HashMap<String, Int>()
+        for ((_, body) in objects) {
+            val text = String(body, 0, minOf(body.size, 4096), Charsets.ISO_8859_1)
+            val fontAt = text.indexOf("/Font")
+            if (fontAt < 0) continue
+            val dictStart = text.indexOf("<<", fontAt)
+            if (dictStart < 0) continue
+            val dictEnd = text.indexOf(">>", dictStart)
+            val dict = if (dictEnd > 0) text.substring(dictStart, dictEnd) else text.substring(dictStart)
+            for (m in FONT_ENTRY_RE.findAll(dict)) {
+                val obj = m.groupValues[2].toIntOrNull() ?: continue
+                out.putIfAbsent(m.groupValues[1], obj)
+            }
+        }
+        return out
+    }
+
+    /**
+     * 解析每个字体的 /ToUnicode CMap：CID → Unicode 文本。
+     *
+     * Type0 字体（Identity-H + ToUnicode）在教务导出的 PDF 里很常见，
+     * 文本是 `<0001>` 这样的字形编号，必须查这张表才有汉字。
+     */
+    fun fontToUnicode(): Map<String, Map<Int, String>> {
+        val out = HashMap<String, Map<Int, String>>()
+        for ((name, objNum) in fontObjects()) {
+            val body = objects[objNum] ?: continue
+            val head = String(body, 0, minOf(body.size, 2048), Charsets.ISO_8859_1)
+            val ref = TO_UNICODE_RE.find(head)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+            val cmapBytes = stream(ref)
+            if (cmapBytes.isEmpty()) continue
+            val table = parseToUnicodeCmap(String(cmapBytes, Charsets.ISO_8859_1))
+            if (table.isNotEmpty()) out[name] = table
+        }
+        return out
+    }
+
+    /** 解析 ToUnicode CMap 里的 beginbfchar / beginbfrange。 */
+    private fun parseToUnicodeCmap(text: String): Map<Int, String> {
+        val table = HashMap<Int, String>()
+        BFCHAR_BLOCK.findAll(text).forEach { block ->
+            for (m in HEX_PAIR.findAll(block.groupValues[1])) {
+                val code = m.groupValues[1].toIntOrNull(16) ?: continue
+                val value = hexToUnicode(m.groupValues[2])
+                if (value.isNotEmpty()) table[code] = value
+            }
+        }
+        BFRANGE_BLOCK.findAll(text).forEach { block ->
+            val inner = block.groupValues[1]
+            val m = BFRANGE_HEAD.find(inner) ?: return@forEach
+            val lo = m.groupValues[1].toIntOrNull(16) ?: return@forEach
+            val hi = m.groupValues[2].toIntOrNull(16) ?: return@forEach
+            @Suppress("NAME_SHADOWING")
+            val dst = m.groupValues[3]
+            if (dst.trimStart().startsWith("[")) {
+                val items = HEX_TOKEN.findAll(dst).map { it.value }.toList()
+                items.forEachIndexed { i, hex ->
+                    val code = lo + i
+                    if (code <= hi) table.putIfAbsent(code, hexToUnicode(hex))
+                }
+            } else {
+                val start = dst.trim().toIntOrNull(16) ?: return@forEach
+                for (code in lo..hi) {
+                    val v = start + (code - lo)
+                    table.putIfAbsent(code, String(Character.toChars(v.coerceIn(0, 0x10FFFF))))
+                }
+            }
+        }
+        return table
+    }
+
+    private fun hexToUnicode(hex: String): String {
+        val clean = hex.filter { it.isLetterOrDigit() }
+        if (clean.isEmpty() || clean.length % 2 != 0) return ""
+        val bytes = ByteArray(clean.length / 2) {
+            clean.substring(it * 2, it * 2 + 2).toIntOrNull(16)?.toByte() ?: 0
+        }
+        return String(bytes, Charsets.UTF_16BE)
+    }
+
     fun resourceCmaps(): Map<String, String> {
         val byNumber = fontCmaps()
         val out = HashMap<String, String>()
@@ -181,6 +263,13 @@ internal class PdfDocument(val bytes: ByteArray) {
         private val UNI_CMAP_RE = Regex("/Encoding\\s*/(Uni[A-Za-z0-9-]+)")
         private val ENCODING_RE = Regex("/Encoding\\s*/([#A-Za-z0-9_.-]+)")
         private val FONT_ENTRY_RE = Regex("/([A-Za-z0-9]+)\\s+(\\d+)\\s+0\\s+R")
+        private val TO_UNICODE_RE = Regex("/ToUnicode\\s+(\\d+)\\s+0\\s+R")
+        private val BFCHAR_BLOCK = Regex("beginbfchar(.*?)endbfchar", RegexOption.DOT_MATCHES_ALL)
+        private val BFRANGE_BLOCK = Regex("beginbfrange(.*?)endbfrange", RegexOption.DOT_MATCHES_ALL)
+        private val BFRANGE_HEAD =
+            Regex("<\\s*([0-9A-Fa-f]+)\\s*>\\s*<\\s*([0-9A-Fa-f]+)\\s*>\\s*(\\[[^\\]]*]|<[0-9A-Fa-f]+>)")
+        private val HEX_PAIR = Regex("<\\s*([0-9A-Fa-f]+)\\s*>\\s*<\\s*([0-9A-Fa-f]+)\\s*>")
+        private val HEX_TOKEN = Regex("<([0-9A-Fa-f]+)>")
 
         internal fun indexOf(haystack: ByteArray, needle: ByteArray, from: Int = 0): Int {
             if (needle.isEmpty() || haystack.size < needle.size) return -1

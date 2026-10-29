@@ -44,6 +44,12 @@ enum class School(
         sourceKind = SourceKind.PDF,
         note = "教务 PDF 课表，版式与沈阳师范大学相同，用同一套解析。",
     ),
+    DBUFE(
+        id = "dbufe",
+        displayName = "东北财经大学",
+        sourceKind = SourceKind.PDF,
+        note = "教务 PDF 课表；需要文字版 PDF（截图/扫描的读不出来）。",
+    ),
     SIE(
         id = "sie",
         displayName = "沈阳工程学院",
@@ -63,7 +69,7 @@ object SchoolImport {
 
     fun parse(context: Context, uri: Uri, school: School): ParsedTimetable = when (school) {
         // 沈师大与沈航的教务 PDF 版式一致，共用 PDF 解析
-        School.SYNU, School.SAU -> PdfImport.parse(context, uri)
+        School.SYNU, School.SAU, School.DBUFE -> PdfImport.parse(context, uri)
         School.SIE -> parseExcel(context, uri)
     }
 
