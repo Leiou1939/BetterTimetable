@@ -18,7 +18,16 @@ data class UpdateInfo(
     val apkSize: Long,
     val publishedAt: String,
     val htmlUrl: String,
-)
+    // ---- 差量更新（有就用，没有就整包下载）
+    val apkSha256: String = "",
+    val patchUrl: String = "",
+    val patchAssetId: Long = 0L,
+    val patchSize: Long = 0L,
+    val patchFromSha256: String = "",
+    val patchToSha256: String = "",
+) {
+    val hasPatch: Boolean get() = patchFromSha256.isNotEmpty() && (patchAssetId > 0L || patchUrl.isNotEmpty())
+}
 
 /**
  * 通过 GitHub Releases 检查并下载更新。
@@ -65,20 +74,62 @@ object UpdateChecker {
         var apkUrl = ""
         var apkAssetId = 0L
         var apkSize = 0L
+        var manifestAssetId = 0L
+        var manifestUrl = ""
         if (assets != null) {
             for (i in 0 until assets.length()) {
                 val a = assets.optJSONObject(i) ?: continue
                 val name = a.optString("name", "")
-                if (name.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = a.optString("browser_download_url", "")
-                    apkAssetId = a.optLong("id", 0L)
-                    apkSize = a.optLong("size", 0L)
-                    break
+                when {
+                    name.endsWith(".apk", ignoreCase = true) && apkUrl.isEmpty() -> {
+                        apkUrl = a.optString("browser_download_url", "")
+                        apkAssetId = a.optLong("id", 0L)
+                        apkSize = a.optLong("size", 0L)
+                    }
+                    name == "update.json" -> {
+                        manifestAssetId = a.optLong("id", 0L)
+                        manifestUrl = a.optString("browser_download_url", "")
+                    }
                 }
             }
         }
         if (apkUrl.isEmpty() && apkAssetId <= 0L) {
             throw IllegalStateException("这个 Release 里没有 APK 附件")
+        }
+
+        // 发布里如果带了 update.json，就按里面的哈希决定能不能用补丁
+        var apkSha = ""
+        var patchName = ""
+        var patchSize = 0L
+        var patchFrom = ""
+        var patchTo = ""
+        var patchAssetId = 0L
+        if (manifestAssetId > 0L || manifestUrl.isNotEmpty()) {
+            val slug = repo(context)
+            val manifest = runCatching {
+                val url = if (manifestAssetId > 0L && slug.contains('/')) {
+                    "$API/repos/$slug/releases/assets/$manifestAssetId"
+                } else {
+                    manifestUrl
+                }
+                JSONObject(httpGet(url))
+            }.getOrNull()
+            if (manifest != null) {
+                apkSha = manifest.optString("apkSha256", "")
+                patchName = manifest.optString("patch", "")
+                patchSize = manifest.optLong("patchSize", 0L)
+                patchFrom = manifest.optString("patchFromSha256", "")
+                patchTo = manifest.optString("patchToSha256", "")
+            }
+        }
+        if (patchName.isNotEmpty() && assets != null) {
+            for (i in 0 until assets.length()) {
+                val a = assets.optJSONObject(i) ?: continue
+                if (a.optString("name", "") == patchName) {
+                    patchAssetId = a.optLong("id", 0L)
+                    break
+                }
+            }
         }
 
         return UpdateInfo(
@@ -91,7 +142,52 @@ object UpdateChecker {
             apkSize = apkSize,
             publishedAt = obj.optString("published_at", ""),
             htmlUrl = obj.optString("html_url", ""),
+            apkSha256 = apkSha,
+            patchUrl = "",
+            patchAssetId = patchAssetId,
+            patchSize = patchSize,
+            patchFromSha256 = patchFrom,
+            patchToSha256 = patchTo,
         )
+    }
+
+    /** 下载任意附件（APK 或补丁）；[assetId] 优先走 API，失败再回落网页地址。 */
+    fun downloadAsset(
+        context: Context,
+        url: String,
+        assetId: Long,
+        expectedSize: Long,
+        fileName: String,
+        onProgress: (downloaded: Long, total: Long) -> Unit,
+    ): File {
+        val dir = File(context.cacheDir, "update").apply { mkdirs() }
+        val target = File(dir, fileName)
+        if (target.exists() && target.length() >= 16L &&
+            (expectedSize <= 0L || target.length() == expectedSize)
+        ) {
+            onProgress(target.length(), target.length())
+            return target
+        }
+        val candidates = ArrayList<String>()
+        val slug = repo(context)
+        if (assetId > 0L && slug.contains('/')) {
+            candidates += "$API/repos/$slug/releases/assets/$assetId"
+        }
+        if (url.isNotEmpty()) candidates += url
+        if (candidates.isEmpty()) throw IllegalStateException("没有可用的下载地址")
+
+        var lastError: Throwable? = null
+        for (candidate in candidates) {
+            try {
+                fetchTo(candidate, expectedSize, target, onProgress)
+                if (target.length() > 0) return target
+                lastError = IllegalStateException("下载到的文件是空的")
+            } catch (t: Throwable) {
+                lastError = t
+            }
+        }
+        target.delete()
+        throw IllegalStateException("下载失败：${lastError?.message ?: "网络不可用"}")
     }
 
     /** "v1.2" / "1.2.3" → [1, 2] / [1, 2, 3]；解析不出来返回空列表。 */

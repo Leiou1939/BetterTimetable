@@ -67,7 +67,15 @@ class UpdateDownloadService : Service() {
             var lastTime = 0L
             var lastBytes = 0L
             try {
-                val apk = UpdateChecker.downloadApk(this@UpdateDownloadService, info) { done, total ->
+                // ---- 优先走差量补丁：只下载变化的部分，本地还原成完整包
+                val patched = tryPatch(info) { done, total, pct ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastTime > 800) {
+                        lastTime = now
+                        notify(progressNotification(pct, done, total))
+                    }
+                }
+                val apk = patched ?: UpdateChecker.downloadApk(this@UpdateDownloadService, info) { done, total ->
                     val pct = if (total > 0) ((done * 100) / total).toInt() else 0
                     val now = System.currentTimeMillis()
                     if (now - lastTime > 800) {
@@ -99,6 +107,45 @@ class UpdateDownloadService : Service() {
         scope = null
         running = false
         super.onDestroy()
+    }
+
+    /**
+     * 尝试用补丁更新：本机安装包的 sha256 必须与补丁记录的"来源"一致，
+     * 还原后还要与"目标"一致，任何一步不对就返回 null（调用方改用整包下载）。
+     */
+    private fun tryPatch(
+        info: UpdateInfo,
+        onProgress: (done: Long, total: Long, percent: Int) -> Unit,
+    ): File? {
+        if (!info.hasPatch) return null
+        val installed = File(applicationInfo.sourceDir)
+        if (!installed.exists()) return null
+        val localSha = runCatching { BsPatch.sha256(installed) }.getOrNull() ?: return null
+        if (localSha != info.patchFromSha256) return null      // 本机这版不是补丁对应的来源
+
+        val patchFile = runCatching {
+            UpdateChecker.downloadAsset(
+                context = this,
+                url = info.patchUrl,
+                assetId = info.patchAssetId,
+                expectedSize = info.patchSize,
+                fileName = "patch-${info.tag}.ttpatch",
+            ) { done, total ->
+                val pct = if (total > 0) ((done * 100) / total).toInt() else 0
+                onProgress(done, total, pct)
+            }
+        }.getOrNull() ?: return null
+
+        val target = File(File(cacheDir, "update").apply { mkdirs() }, "timetable-${info.tag}.apk")
+        val ok = runCatching { BsPatch.apply(installed, patchFile, target) }.getOrNull()
+        runCatching { patchFile.delete() }
+        val expect = info.patchToSha256.ifEmpty { info.apkSha256 }
+        return if (ok != null && (expect.isEmpty() || ok == expect)) {
+            target
+        } else {
+            runCatching { target.delete() }
+            null
+        }
     }
 
     // ------------------------------------------------------------ 通知

@@ -64,6 +64,31 @@ jobs:
              "dist/timetable-${{ steps.version.outputs.name }}.apk"
           ls -lh dist
 
+      - name: 生成差量补丁
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          mkdir -p prev
+          APK="dist/timetable-$VERSION_NAME.apk"
+          PATCH="dist/patch-$VERSION_NAME.ttpatch"
+          PREV=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)
+          echo "上一个版本：$PREV"
+          if [ -n "$PREV" ]; then
+            gh release download "$PREV" --pattern '*.apk' --dir prev 2>/dev/null || true
+            OLD=$(ls prev/*.apk 2>/dev/null | head -1 || true)
+            if [ -n "$OLD" ]; then
+              python3 tools/make_patch.py "$OLD" "$APK" "$PATCH" || rm -f "$PATCH"
+            fi
+          fi
+          if [ -f "$PATCH" ]; then
+            python3 tools/make_update_json.py "$VERSION_NAME" "$APK" "$PATCH" > dist/update.json
+          else
+            python3 tools/make_update_json.py "$VERSION_NAME" "$APK" > dist/update.json
+          fi
+          cat dist/update.json
+          ls -lh dist
+
       - name: 发布 Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
