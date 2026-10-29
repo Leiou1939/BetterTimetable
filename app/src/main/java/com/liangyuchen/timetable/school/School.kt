@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.liangyuchen.timetable.pdf.ParsedTimetable
 import com.liangyuchen.timetable.pdf.PdfImport
+import com.liangyuchen.timetable.pdf.TimetablePdfParser
 
 /** 导入时支持的文件类型。 */
 enum class SourceKind(val mimeTypes: Array<String>, val label: String) {
@@ -48,7 +49,25 @@ enum class School(
         id = "dbufe",
         displayName = "东北财经大学",
         sourceKind = SourceKind.PDF,
-        note = "教务 PDF 课表；需要文字版 PDF（截图/扫描的读不出来）。",
+        note = "教务 PDF 课表（截图型 PDF 会走 OCR 识别）。",
+    ),
+    LNU(
+        id = "lnu",
+        displayName = "辽宁大学",
+        sourceKind = SourceKind.PDF,
+        note = "教务 PDF 课表（截图型 PDF 会走 OCR 识别）。",
+    ),
+    DLPU(
+        id = "dlpu",
+        displayName = "大连工业大学",
+        sourceKind = SourceKind.PDF,
+        note = "教务 PDF 课表（截图型 PDF 会走 OCR 识别）。",
+    ),
+    LNPC(
+        id = "lnpc",
+        displayName = "辽宁石油化工大学",
+        sourceKind = SourceKind.EXCEL,
+        note = "教务导出的 .xls 课表，一格多课也能拆开。",
     ),
     SIE(
         id = "sie",
@@ -67,10 +86,33 @@ enum class School(
 /** 按学校分派到对应的解析方案。 */
 object SchoolImport {
 
-    fun parse(context: Context, uri: Uri, school: School): ParsedTimetable = when (school) {
-        // 沈师大与沈航的教务 PDF 版式一致，共用 PDF 解析
-        School.SYNU, School.SAU, School.DBUFE -> PdfImport.parse(context, uri)
-        School.SIE -> parseExcel(context, uri)
+    suspend fun parse(context: Context, uri: Uri, school: School): ParsedTimetable = when (school) {
+        // 这些学校的教务 PDF 版式相同，共用 PDF 解析；失败再走 OCR
+        School.SYNU, School.SAU, School.DBUFE, School.LNU, School.DLPU ->
+            parsePdf(context, uri)
+        School.SIE, School.LNPC -> parseExcel(context, uri)
+    }
+
+    /** 先按文字层解析；如果发现"课表是图片"，再调 OCR 兜底。 */
+    private suspend fun parsePdf(context: Context, uri: Uri): ParsedTimetable {
+        val bytes = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        }.getOrNull()
+            ?: return ParsedTimetable(emptyList(), warnings = listOf("无法读取所选文件"))
+        if (bytes.isEmpty()) {
+            return ParsedTimetable(emptyList(), warnings = listOf("所选文件是空的"))
+        }
+        val textResult = TimetablePdfParser.parse(bytes)
+        if (textResult.courses.isNotEmpty()) return textResult
+        val looksLikeImage = textResult.warnings.any { it.contains("图片") }
+        if (!looksLikeImage) return textResult
+        // 没有文字层 → OCR
+        val ocr = OcrPdfImport.parse(context, bytes)
+        return if (ocr.courses.isNotEmpty()) {
+            ocr
+        } else {
+            textResult.copy(warnings = textResult.warnings + ocr.warnings)
+        }
     }
 
     private fun parseExcel(context: Context, uri: Uri): ParsedTimetable {

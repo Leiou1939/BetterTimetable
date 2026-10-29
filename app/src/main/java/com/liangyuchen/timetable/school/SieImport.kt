@@ -137,12 +137,12 @@ object SieImport {
                 periods += Period(periodIndex * 2, mid, e2)
             }
 
-            // 每一列：一门课
+            // 每一列：可能有多门课（同一格子里叠着写）
             for ((col, day) in dayCols) {
                 val raw = sheet.cell(r, col)
                 if (raw.isBlank()) continue
-                val parsed = parseCourseCell(raw, day, periodIndex)
-                if (parsed == null) {
+                val parsed = parseCourseCells(raw, day, periodIndex)
+                if (parsed.isEmpty()) {
                     warnings += "第 ${periodIndex} 大节 星期${day + 1} 的格子没读懂：${raw.take(24)}"
                 } else {
                     courses += parsed
@@ -179,73 +179,86 @@ object SieImport {
      * 教学楼A座326电力
      * ```
      */
-    private fun parseCourseCell(raw: String, day: Int, periodIndex: Int): ParsedCourse? {
+    private fun parseCourseCells(raw: String, day: Int, periodIndex: Int): List<ParsedCourse> {
         val lines = raw.split('\n', '\r')
             .map { it.replace('\u3000', ' ').trim() }
             .filter { it.isNotEmpty() }
-        if (lines.isEmpty()) return null
+        if (lines.isEmpty()) return emptyList()
 
-        val name = lines.first()
-        if (name.isEmpty() || WEEKS_PAREN_RE.matches(name)) return null
-
-        var teacher = ""
-        var weeksLine = ""
-        var weekSpec = ""
-        var slotFrom = 0
-        var slotTo = 0
-        val others = ArrayList<String>()
-
-        for (line in lines.drop(1)) {
-            when {
-                line.matches(Regex("^\\[[^\\]]*]$")) -> teacher = line.removeSurrounding("[", "]")
-                WEEKS_PAREN_RE.matches(line) -> {
-                    weeksLine = WEEKS_PAREN_RE.find(line)?.groupValues?.get(1)?.trim() ?: ""
-                    weekSpec = line
-                    SLOT_RE.find(line)?.let {
-                        slotFrom = it.groupValues[1].toIntOrNull() ?: 0
-                        slotTo = it.groupValues[2].toIntOrNull() ?: 0
-                    }
+        // 一格多课时的版式：
+        //   课程名 / [教师] / （周次[节次]） / 地点
+        //   课程名 / [教师] / （周次[节次]） / 地点   ← 再来一门
+        // 以"（…周…）"这一行为界切开。
+        val out = ArrayList<ParsedCourse>()
+        var head = ArrayList<String>()
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (WEEKS_PAREN_RE.matches(line)) {
+                val name = head.firstOrNull { it.isNotBlank() } ?: ""
+                val teacher = head.drop(1).firstOrNull { BRACKET_RE.matches(it) }
+                    ?.removeSurrounding("[", "]") ?: ""
+                val weeksText = WEEKS_PAREN_RE.find(line)?.groupValues?.get(1)?.trim() ?: ""
+                var slotFrom = 0
+                var slotTo = 0
+                SLOT_RE.find(line)?.let {
+                    slotFrom = it.groupValues[1].toIntOrNull() ?: 0
+                    slotTo = it.groupValues[2].toIntOrNull() ?: 0
                 }
-
-                else -> others += line
+                // 下一行是地点（除非已经是下一门课的开始）
+                var room = ""
+                if (i + 1 < lines.size && !WEEKS_PAREN_RE.matches(lines[i + 1]) &&
+                    !BRACKET_RE.matches(lines[i + 1])
+                ) {
+                    room = lines[i + 1]
+                    i++
+                }
+                val weeks = parseWeeks(weeksText)
+                if (name.isNotEmpty() && weeks.isNotEmpty()) {
+                    val from = when {
+                        slotFrom > 0 -> slotFrom
+                        periodIndex > 0 -> periodIndex * 2 - 1
+                        else -> 1
+                    }
+                    val to = when {
+                        slotTo > 0 && slotTo >= from -> slotTo
+                        from % 2 == 1 -> from + 1
+                        else -> from
+                    }
+                    out += ParsedCourse(
+                        name = name,
+                        day = day,
+                        periodFrom = from,
+                        periodTo = to,
+                        weeks = weeks,
+                        teacher = teacher,
+                        room = room,
+                        campus = if (room.startsWith("教学楼")) "教学楼" else "",
+                        className = "",
+                        kind = "",
+                        credits = "",
+                        hours = "",
+                        weekSpec = line,
+                    )
+                }
+                head = ArrayList()
+            } else {
+                head += line
             }
+            i++
         }
-        val weeks = parseWeeks(weeksLine)
-        if (weeks.isEmpty()) return null
-
-        // 地点：普通情况下是最后一行的"教学楼A座326电力"
-        val room = others.lastOrNull { it.isNotBlank() } ?: ""
-        val campus = if (room.startsWith("教学楼")) "教学楼" else ""
-
-        // 格子里写的是小节号 [01-02] / [03-04] …，直接对应表格的 1..10 行；
-        // 没写的话用"第 k 大节 → 第 2k-1、2k 节"推出来。
-        val from = when {
-            slotFrom > 0 -> slotFrom
-            periodIndex > 0 -> periodIndex * 2 - 1
-            else -> 1
+        // 同一个格子里"同名 + 同周次"的重复块，通常是可选教学班（体育1 会列二十多个），
+        // 只保留第一个，避免互相重叠把格子塞爆。
+        val unique = ArrayList<ParsedCourse>()
+        val seen = HashSet<String>()
+        for (c in out) {
+            val key = "${c.name}|${c.weeks}|${c.periodFrom}-${c.periodTo}"
+            if (seen.add(key)) unique += c
         }
-        val to = when {
-            slotTo > 0 && slotTo >= from -> slotTo
-            from % 2 == 1 -> from + 1
-            else -> from
-        }
-
-        return ParsedCourse(
-            name = name,
-            day = day,
-            periodFrom = from,
-            periodTo = to,
-            weeks = weeks,
-            teacher = teacher,
-            room = room,
-            campus = campus,
-            className = "",
-            kind = "",
-            credits = "",
-            hours = "",
-            weekSpec = weekSpec,
-        )
+        return unique
     }
+
+    private val BRACKET_RE = Regex("^\\[[^\\]]*]$")
 
     /** `6-17周` / `6-17单周` / `6-17双周` / `7,9,11周` / `15周` → 周次列表。 */
     internal fun parseWeeks(text: String): List<Int> {
