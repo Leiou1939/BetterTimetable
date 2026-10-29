@@ -102,7 +102,10 @@ jobs:
           if [ -z "$NOTES" ]; then NOTES="- 常规更新"; fi
           printf '%s\n\n%s\n' "$NOTES" "(构建于 $(date -u '+%Y-%m-%d %H:%M UTC')，提交 ${GITHUB_SHA:0:7})" > notes.md
           echo "----- 更新内容 -----"; cat notes.md
-          gh release create "$TAG" dist/*.apk \
+          # APK + 差量补丁 + update.json 一起上传
+          FILES=$(ls dist/*.apk dist/*.ttpatch dist/update.json 2>/dev/null | tr '\n' ' ')
+          echo "上传：$FILES"
+          gh release create "$TAG" $FILES \
             --title "课程表 $VERSION_NAME" \
             --notes-file notes.md \
-          || gh release upload "$TAG" dist/*.apk --clobber
+          || gh release upload "$TAG" $FILES --clobber
