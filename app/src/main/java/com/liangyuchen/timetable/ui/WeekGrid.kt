@@ -36,7 +36,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -140,7 +147,6 @@ fun WeekGrid(
     modifier: Modifier = Modifier,
 ) {
     val periods = data.periods
-    val monday = ScheduleCalc.mondayOfWeek(data, week)
     val isCurrentWeek = week == ScheduleCalc.weekOf(data, today)
     val todayIndex = ScheduleCalc.dayIndexOf(today)
 
@@ -254,63 +260,89 @@ fun WeekGrid(
             } else {
                 Modifier
             }
-            Row(
-                modifier = if (metrics.fits) {
-                    weekSwipe
-                } else {
-                    Modifier.horizontalScroll(hScroll)
+            // 只有这一块跟着翻周滑动；左边的时间列在 AnimatedContent 之外，保持不动
+            AnimatedContent(
+                targetState = week,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInHorizontally { it } + fadeIn()) togetherWith
+                            (slideOutHorizontally { -it } + fadeOut())
+                    } else {
+                        (slideInHorizontally { -it } + fadeIn()) togetherWith
+                            (slideOutHorizontally { it } + fadeOut())
+                    }
                 },
-            ) {
-                Column {
-                    DayHeaderRow(
-                        data = data,
-                        days = days,
-                        week = week,
-                        monday = monday,
-                        today = today,
-                        selectedDay = selectedDay,
-                        dayCol = metrics.dayCol,
-                        headerHeight = headerHeight,
-                        dateSize = dateSize,
-                        weekdaySize = weekdaySize,
-                        countSize = countSize,
-                        onSelectDay = onSelectDay,
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(metrics.gridWidth)
-                            .height(gridHeight),
-                    ) {
-                        DrawGridLines(periods.size, gridHeight, metrics.gridWidth, rowHeight)
-                        for (day in 0 until days) {
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = metrics.dayCol * day)
-                                    .width(metrics.dayCol)
-                                    .height(gridHeight)
-                                    .background(
-                                        if (selectedDay == day) {
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
-                                        } else {
-                                            Color.Transparent
-                                        },
-                                    ),
-                            ) {
-                                data.coursesOn(day, week).forEach { course ->
-                                    CourseBlock(
-                                        course = course,
-                                        width = metrics.dayCol,
-                                        rowHeight = rowHeight,
-                                        nameSize = nameSize,
-                                        roomSize = roomSize,
-                                        onClick = { onCourseClick(course) },
-                                    )
+                label = "week-area",
+                modifier = Modifier
+                    .width(metrics.gridWidth)
+                    .clipToBounds(),
+            ) { shownWeek ->
+                val shownMonday = ScheduleCalc.mondayOfWeek(data, shownWeek)
+                val shownIsCurrent = shownWeek == ScheduleCalc.weekOf(data, today)
+                Row(
+                    modifier = if (metrics.fits) {
+                        weekSwipe
+                    } else {
+                        Modifier.horizontalScroll(hScroll)
+                    },
+                ) {
+                    Column {
+                        DayHeaderRow(
+                            data = data,
+                            days = days,
+                            week = shownWeek,
+                            monday = shownMonday,
+                            today = today,
+                            selectedDay = selectedDay,
+                            dayCol = metrics.dayCol,
+                            headerHeight = headerHeight,
+                            dateSize = dateSize,
+                            weekdaySize = weekdaySize,
+                            countSize = countSize,
+                            onSelectDay = onSelectDay,
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(metrics.gridWidth)
+                                .height(gridHeight),
+                        ) {
+                            DrawGridLines(periods.size, gridHeight, metrics.gridWidth, rowHeight)
+                            for (day in 0 until days) {
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = metrics.dayCol * day)
+                                        .width(metrics.dayCol)
+                                        .height(gridHeight)
+                                        .background(
+                                            if (selectedDay == day) {
+                                                MaterialTheme.colorScheme.primary.copy(
+                                                    alpha = 0.04f,
+                                                )
+                                            } else {
+                                                Color.Transparent
+                                            },
+                                        ),
+                                ) {
+                                    data.coursesOn(day, shownWeek).forEach { course ->
+                                        CourseBlock(
+                                            course = course,
+                                            width = metrics.dayCol,
+                                            rowHeight = rowHeight,
+                                            nameSize = nameSize,
+                                            roomSize = roomSize,
+                                            onClick = { onCourseClick(course) },
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        // 当前时间线：只画在「今天」那一列里
-                        if (showNowLine && nowTop != null) {
-                            NowLine(dayIndex = todayIndex, top = nowTop, dayCol = metrics.dayCol)
+                            // 当前时间线：只画在「今天」那一列里
+                            if (showNowLine && nowTop != null && shownIsCurrent) {
+                                NowLine(
+                                    dayIndex = todayIndex,
+                                    top = nowTop,
+                                    dayCol = metrics.dayCol,
+                                )
+                            }
                         }
                     }
                 }

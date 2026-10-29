@@ -350,24 +350,9 @@ fun TimetableScreen(
                     modifier = Modifier.weight(1f),
                 )
             } else {
-                AnimatedContent(
-                    targetState = viewModel.week,
-                    transitionSpec = {
-                        // 往后翻：新的一周从右侧滑入；往前翻则相反
-                        if (targetState > initialState) {
-                            (slideInHorizontally { it } + fadeIn()) togetherWith
-                                (slideOutHorizontally { -it } + fadeOut())
-                        } else {
-                            (slideInHorizontally { -it } + fadeIn()) togetherWith
-                                (slideOutHorizontally { it } + fadeOut())
-                        }
-                    },
-                    label = "week",
-                    modifier = Modifier.weight(1f),
-                ) { shownWeek ->
                 WeekGrid(
                     data = data,
-                    week = shownWeek,
+                    week = viewModel.week,
                     today = today,
                     selectedDay = selectedDay,
                     onCourseClick = { detailCourse = it },
@@ -383,9 +368,8 @@ fun TimetableScreen(
                         viewModel.nextWeek()
                         selectedDay = ScheduleCalc.dayIndexOf(today)
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f),
                 )
-                }
             }
         }
     }
