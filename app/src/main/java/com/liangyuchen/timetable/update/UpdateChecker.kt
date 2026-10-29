@@ -23,8 +23,9 @@ data class UpdateInfo(
 /**
  * 通过 GitHub Releases 检查并下载更新。
  *
- * 约定：Release 的 tag 最后一段数字 == APK 的 versionCode。
- * CI 发布 `v1.0.1007` 时 versionCode 就是 1007，所以"数字大 = 版本新"。
+ * 约定：Release 的 tag 就是版本号本身（`v1.1`、`v1.2`…），
+ * 与 APK 的 versionName 逐段比较（1.2 > 1.1 > 1.0.9），
+ * versionCode 只用于 Android 允许覆盖安装，不参与新旧判断。
  */
 object UpdateChecker {
 
@@ -54,9 +55,11 @@ object UpdateChecker {
         val json = httpGet("$API/repos/$slug/releases/latest")
         val obj = JSONObject(json)
         val tag = obj.optString("tag_name", "")
-        val remoteCode = parseVersionCode(tag)
-        if (remoteCode <= 0) throw IllegalStateException("发布信息里没有可用的版本号：$tag")
-        if (remoteCode <= BuildConfig.VERSION_CODE) return null
+        if (versionParts(tag).isEmpty()) {
+            throw IllegalStateException("发布信息里没有可用的版本号：$tag")
+        }
+        // 已经是同一版或更新版本就不提示
+        if (!isNewer(tag, BuildConfig.VERSION_NAME)) return null
 
         val assets = obj.optJSONArray("assets")
         var apkUrl = ""
@@ -80,7 +83,7 @@ object UpdateChecker {
 
         return UpdateInfo(
             tag = tag,
-            versionCode = remoteCode,
+            versionCode = versionCodeOf(tag),
             title = obj.optString("name", tag),
             notes = obj.optString("body", "").take(1200),
             apkUrl = apkUrl,
@@ -91,10 +94,36 @@ object UpdateChecker {
         )
     }
 
-    /** 从 tag 里取版本号：`v1.0.12` → 12，`v1.2.0` → 1_002_000 之类的比较不便，故取最后一段。 */
-    internal fun parseVersionCode(tag: String): Int {
-        val tail = tag.trim().substringAfterLast('.').filter { it.isDigit() }
-        return tail.toIntOrNull() ?: 0
+    /** "v1.2" / "1.2.3" → [1, 2] / [1, 2, 3]；解析不出来返回空列表。 */
+    internal fun versionParts(text: String): List<Int> {
+        val cleaned = text.trim().removePrefix("v").removePrefix("V")
+        val parts = cleaned.split('.', '-', '+')
+            .mapNotNull { seg -> Regex("^\\d+").find(seg)?.value?.toIntOrNull() }
+        return parts
+    }
+
+    /** [remote] 是否比 [local] 新（逐段比较，缺的段按 0 算）。 */
+    internal fun isNewer(remote: String, local: String): Boolean {
+        val a = versionParts(remote)
+        val b = versionParts(local)
+        if (a.isEmpty()) return false
+        val n = maxOf(a.size, b.size)
+        for (i in 0 until n) {
+            val x = a.getOrElse(i) { 0 }
+            val y = b.getOrElse(i) { 0 }
+            if (x != y) return x > y
+        }
+        return false
+    }
+
+    /** Android 覆盖安装用的 versionCode：1.2 → 10200，保证单调递增。 */
+    internal fun versionCodeOf(tag: String): Int {
+        val p = versionParts(tag)
+        if (p.isEmpty()) return 0
+        val major = p.getOrElse(0) { 0 }
+        val minor = p.getOrElse(1) { 0 }
+        val patch = p.getOrElse(2) { 0 }
+        return major * 10000 + minor * 100 + patch
     }
 
     /**

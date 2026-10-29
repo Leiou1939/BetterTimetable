@@ -1,10 +1,10 @@
 # 推送（或打 tag）就自动编译 + 发布 GitHub Release，App 内的「检查更新」会读到这个 Release。
 #
-# 版本号策略（三处必须一致，否则 App 判断不出"有新版"）：
-#   BUILD_NO    = 本次运行序号（单调递增）
-#   versionCode = 2000 + BUILD_NO      ← App 内比较用的是这个
-#   versionName = 2.BUILD_NO           ← 显示给人看
-#   tag         = v1.0.(2000+BUILD_NO) ← App 取 tag 最后一段数字，正好等于 versionCode
+# 版本号策略：仓库里的 VERSION 文件说了算（例如 1.2）
+#   versionName = VERSION              ← App 显示 & 新旧比较都用它
+#   versionCode = 主*10000+次*100+修订  ← 只用于 Android 允许覆盖安装
+#   tag         = vVERSION             ← 例如 v1.2
+# 发新版时只要改 VERSION 文件（1.2 → 1.3）再 push 即可。
 name: Build & Release
 
 on:
@@ -35,16 +35,18 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: 计算版本号
+      - name: 读取版本号
         id: version
         run: |
-          BUILD_NO=${{ github.run_number }}
-          # 本地构建的版本号是 1xxx，发布版从 2000 起，保证"线上一定比本地新"
-          CODE=$((2000 + BUILD_NO))
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2); MINOR=${MINOR:-0}
+          PATCH=$(echo "$VERSION" | cut -d. -f3); PATCH=${PATCH:-0}
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "code=$CODE" >> $GITHUB_OUTPUT
-          echo "name=2.$BUILD_NO" >> $GITHUB_OUTPUT
-          echo "tag=v1.0.$CODE" >> $GITHUB_OUTPUT
-          echo "本次版本：2.$BUILD_NO（versionCode $CODE，tag v1.0.$CODE）"
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "本次版本：$VERSION（versionCode $CODE，tag v$VERSION）"
 
       - name: 编译 release APK
         # updateRepo 决定 App 内「检查更新」去哪个仓库找 Release
