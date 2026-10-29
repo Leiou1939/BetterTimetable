@@ -54,18 +54,6 @@ enum class School(
         sourceKind = SourceKind.PDF,
         note = "教务 PDF 课表，版式与沈阳师范大学相同，用同一套解析。",
     ),
-    DBUFE(
-        id = "dbufe",
-        displayName = "东北财经大学",
-        sourceKind = SourceKind.PDF,
-        note = "教务 PDF 课表（截图型 PDF 会走 OCR 识别）。",
-    ),
-    LNU(
-        id = "lnu",
-        displayName = "辽宁大学",
-        sourceKind = SourceKind.PDF,
-        note = "教务 PDF 课表（截图型 PDF 会走 OCR 识别）。",
-    ),
     DLPU(
         id = "dlpu",
         displayName = "大连工业大学",
@@ -97,12 +85,12 @@ object SchoolImport {
 
     suspend fun parse(context: Context, uri: Uri, school: School): ParsedTimetable = when (school) {
         // 这些学校的教务 PDF 版式相同，共用 PDF 解析；失败再走 OCR
-        School.SYNU, School.SAU, School.DBUFE, School.LNU -> parsePdf(context, uri)
+        School.SYNU, School.SAU -> parsePdf(context, uri)
         School.SIE, School.LNPC -> parseExcel(context, uri)
         School.DLPU -> parseWord(context, uri)
     }
 
-    /** 先按文字层解析；如果发现"课表是图片"，再调 OCR 兜底。 */
+    /** 按 PDF 的文字层解析。 */
     private suspend fun parsePdf(context: Context, uri: Uri): ParsedTimetable {
         val bytes = runCatching {
             context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -111,17 +99,7 @@ object SchoolImport {
         if (bytes.isEmpty()) {
             return ParsedTimetable(emptyList(), warnings = listOf("所选文件是空的"))
         }
-        val textResult = TimetablePdfParser.parse(bytes)
-        if (textResult.courses.isNotEmpty()) return textResult
-        val looksLikeImage = textResult.warnings.any { it.contains("图片") }
-        if (!looksLikeImage) return textResult
-        // 没有文字层 → OCR
-        val ocr = OcrPdfImport.parse(context, bytes)
-        return if (ocr.courses.isNotEmpty()) {
-            ocr
-        } else {
-            textResult.copy(warnings = textResult.warnings + ocr.warnings)
-        }
+        return TimetablePdfParser.parse(bytes)
     }
 
     /** 大连工业大学：.docx 表格 */

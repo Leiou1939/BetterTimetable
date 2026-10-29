@@ -22,11 +22,6 @@ android {
         versionName = appVersionName
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
 
-        // OCR 的原生库每种 CPU 架构约 6-11MB，只保留手机用得到的两种，
-        // 否则 APK 会从 10MB 涨到 50MB+。
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
-        }
     }
 
     // 调试签名固定到工程内的 keystore/debug.keystore。
@@ -114,9 +109,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-
-    // 截图型 PDF 的离线中文 OCR（模型随 APK 打包，不需要 Play 服务）
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
