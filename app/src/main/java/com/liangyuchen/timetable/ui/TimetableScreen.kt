@@ -64,6 +64,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.key
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.CircularProgressIndicator
@@ -922,6 +926,8 @@ private fun SettingsDialog(
         initialSelectedDateMillis = ScheduleCalc.parseDate(data.termStartDate)
             .atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli(),
     )
+    // 正在编辑哪个节次的哪个时间：(节次, 是否上课时间)
+    var editing by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
 
     if (showDatePicker) {
         DatePickerDialog(
@@ -947,6 +953,61 @@ private fun SettingsDialog(
         }
     }
 
+    // 时间选择器：点时间弹出，不用手输
+    editing?.let { (index, isStart) ->
+        val period = data.periods.firstOrNull { it.index == index }
+        if (period != null) {
+            key(index, isStart) {
+                val initial = if (isStart) period.start else period.end
+                val timeState = rememberTimePickerState(
+                    initialHour = ClockText.hourOf(initial),
+                    initialMinute = ClockText.minuteOf(initial),
+                    is24Hour = true,
+                )
+                AlertDialog(
+                    onDismissRequest = { editing = null },
+                    title = {
+                        Text(
+                            "第 $index 节 · " + if (isStart) "上课时间" else "下课时间",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
+                    text = { TimePicker(state = timeState) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val picked = ClockText.format(timeState.hour, timeState.minute)
+                            if (isStart) {
+                                // 下课时间必须晚于上课时间；没设好就顺延 45 分钟
+                                val end = if (ClockText.minutesOf(picked) <
+                                    ClockText.minutesOf(period.end)
+                                ) {
+                                    period.end
+                                } else {
+                                    ClockText.addMinutes(picked, 45)
+                                }
+                                onPeriodChange(index, picked, end)
+                            } else {
+                                val start = if (ClockText.minutesOf(picked) >
+                                    ClockText.minutesOf(period.start)
+                                ) {
+                                    period.start
+                                } else {
+                                    ClockText.addMinutes(picked, -45)
+                                }
+                                onPeriodChange(index, start, picked)
+                            }
+                            editing = null
+                        }) { Text("确定") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { editing = null }) { Text("取消") }
+                    },
+                )
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("设置", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
@@ -967,27 +1028,21 @@ private fun SettingsDialog(
                 ) {
                     Icon(Icons.Filled.Today, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(
-                        "回到本周（当前第 $currentWeek 周）",
-                        fontSize = 13.sp,
-                    )
+                    Text("回到本周（当前第 $currentWeek 周）", fontSize = 13.sp)
                 }
-                Spacer(Modifier.height(12.dp))
 
-                Text(
-                    text = "开学第一周（周一）",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Spacer(Modifier.height(10.dp))
+
+                // ---- 学期设置：开学日、总周数、作息 三块挨在一起 ----
+                Text("开学第一周（周一）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 OutlinedButton(onClick = { showDatePicker = true }) {
-                    Text(
-                        text = data.termStartDate,
-                        fontSize = 14.sp,
-                    )
+                    Text(data.termStartDate, fontSize = 14.sp)
                 }
-                Spacer(Modifier.height(12.dp))
 
+                Spacer(Modifier.height(10.dp))
                 Text("学期总周数：${data.totalWeeks}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -996,27 +1051,37 @@ private fun SettingsDialog(
                         .horizontalScroll(rememberScrollState()),
                 ) {
                     listOf(16, 18, 20, 22, 24).forEach { n ->
-                        OutlinedButton(onClick = { onTotalWeeksChange(n) }) {
-                            Text(n.toString(), fontSize = 12.sp)
+                        val selected = data.totalWeeks == n
+                        if (selected) {
+                            Button(onClick = { onTotalWeeksChange(n) }) {
+                                Text(n.toString(), fontSize = 12.sp)
+                            }
+                        } else {
+                            OutlinedButton(onClick = { onTotalWeeksChange(n) }) {
+                                Text(n.toString(), fontSize = 12.sp)
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(10.dp))
-                Text("关于与更新", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                OutlinedButton(onClick = onCheckUpdate, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("检查更新", fontSize = 13.sp)
-                }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = onOpenRepo, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("GitHub 仓库", fontSize = 13.sp)
+                Text("作息时间", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(2.dp))
+                data.periods.sortedBy { it.index }.forEach { period ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(vertical = 1.dp),
+                    ) {
+                        Text(
+                            "第 ${period.index} 节",
+                            fontSize = 11.sp,
+                            modifier = Modifier.width(54.dp),
+                        )
+                        TimeChip(period.start) { editing = period.index to true }
+                        Text("–", fontSize = 11.sp)
+                        TimeChip(period.end) { editing = period.index to false }
+                    }
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -1026,9 +1091,7 @@ private fun SettingsDialog(
                 Spacer(Modifier.height(4.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .horizontalScroll(rememberScrollState()),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                 ) {
                     SyncSettings.REMINDER_CHOICES.forEach { minutes ->
                         val selected = sync.reminderMinutes == minutes
@@ -1054,27 +1117,22 @@ private fun SettingsDialog(
                     Text("清空本 App 写入的日程", fontSize = 11.sp)
                 }
 
-                Spacer(Modifier.height(12.dp))
-                Text("作息时间", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                // ---- 关于软件：放在最下面 ----
+                Spacer(Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Spacer(Modifier.height(10.dp))
+                Text("关于软件", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
-                data.periods.sortedBy { it.index }.forEach { period ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 2.dp),
-                    ) {
-                        Text("第 ${period.index} 节", fontSize = 11.sp, modifier = Modifier.width(58.dp))
-                        TimeField(
-                            value = period.start,
-                            onValueChange = { onPeriodChange(period.index, it, period.end) },
-                            modifier = Modifier.width(96.dp),
-                        )
-                        Text(" - ", fontSize = 11.sp)
-                        TimeField(
-                            value = period.end,
-                            onValueChange = { onPeriodChange(period.index, period.start, it) },
-                            modifier = Modifier.width(96.dp),
-                        )
-                    }
+                OutlinedButton(onClick = onCheckUpdate, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("检查更新", fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = onOpenRepo, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("GitHub 仓库", fontSize = 13.sp)
                 }
             }
         },
@@ -1087,23 +1145,32 @@ private fun SettingsDialog(
     )
 }
 
+/** 可点的时间小按钮（点开时间选择器，不用手输）。 */
 @Composable
-private fun TimeField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var text by remember(value) { mutableStateOf(value) }
-    OutlinedTextField(
-        value = text,
-        onValueChange = { input ->
-            text = input
-            if (Regex("^\\d{1,2}:\\d{2}$").matches(input.trim())) onValueChange(input.trim())
-        },
-        singleLine = true,
-        textStyle = TextStyle(fontSize = 12.sp),
-        modifier = modifier.height(52.dp),
-    )
+private fun TimeChip(value: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        modifier = Modifier.height(32.dp),
+    ) {
+        Text(value, fontSize = 13.sp)
+    }
+}
+
+/** "HH:mm" 的换算小工具。 */
+private object ClockText {
+    fun hourOf(text: String): Int = text.substringBefore(":").trim().toIntOrNull() ?: 8
+
+    fun minuteOf(text: String): Int = text.substringAfter(":", "0").trim().toIntOrNull() ?: 0
+
+    fun minutesOf(text: String): Int = hourOf(text) * 60 + minuteOf(text)
+
+    fun format(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
+
+    fun addMinutes(text: String, delta: Int): String {
+        val total = (minutesOf(text) + delta).coerceIn(0, 24 * 60 - 1)
+        return format(total / 60, total % 60)
+    }
 }
 
 internal fun weeksLabel(weeks: List<Int>): String {
