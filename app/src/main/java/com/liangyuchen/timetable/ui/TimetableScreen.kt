@@ -36,6 +36,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -102,6 +103,7 @@ import com.liangyuchen.timetable.data.ScheduleCalc
 import com.liangyuchen.timetable.data.ScheduleData
 import com.liangyuchen.timetable.data.SyncSettings
 import com.liangyuchen.timetable.data.SyncPrefs
+import com.liangyuchen.timetable.school.School
 import com.liangyuchen.timetable.data.at
 import com.liangyuchen.timetable.update.UpdateInfo
 import com.liangyuchen.timetable.update.UpdateDialog
@@ -146,6 +148,7 @@ fun TimetableScreen(
     var syncing by remember { mutableStateOf(false) }
     var showSchoolPicker by remember { mutableStateOf(false) }
     var pendingSchool by remember { mutableStateOf(viewModel.importSchool) }
+    var showFeedback by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
     var updateToInstall by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -456,6 +459,10 @@ fun TimetableScreen(
                 showSettings = false
                 showUpdateDialog = true
             },
+            onOpenFeedback = {
+                showSettings = false
+                showFeedback = true
+            },
             onOpenRepo = {
                 val slug = UpdateChecker.repo(context)
                 val url = if (slug.contains('/')) "https://github.com/$slug" else
@@ -479,6 +486,15 @@ fun TimetableScreen(
                 pendingSchool = school
                 pdfPicker.launch(school.sourceKind.mimeTypes)
             },
+        )
+    }
+
+    if (showFeedback) {
+        FeedbackDialog(
+            context = context,
+            repo = UpdateChecker.repo(context),
+            schoolName = School.fromId(data.schoolId).displayName,
+            onDismiss = { showFeedback = false },
         )
     }
 
@@ -920,6 +936,7 @@ private fun SettingsDialog(
     onClearCalendarEvents: () -> Unit,
     onCheckUpdate: () -> Unit,
     onOpenRepo: () -> Unit,
+    onOpenFeedback: () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     val pickerState = rememberDatePickerState(
@@ -1133,6 +1150,15 @@ private fun SettingsDialog(
                     Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("GitHub 仓库", fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(
+                    onClick = onOpenFeedback,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("反馈问题", fontSize = 13.sp)
                 }
             }
         },
