@@ -101,7 +101,9 @@ jobs:
           # 更新内容 = 上次发布以来的提交标题，App 的「发现新版本」弹窗直接显示这段
           PREV=$(git tag --sort=-creatordate | head -1 || true)
           if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
-          NOTES=$(git log --pretty=format:'- %s' "$RANGE" | head -40)
+          # 过滤掉"未推送/仅本地构建"这类临时字样，发布日志只留改动内容
+          NOTES=$(git log --pretty=format:'- %s' "$RANGE" | head -40 \
+            | sed -e 's/（仅本地构建，未推送）//g' -e 's/（仅本地构建）//g' -e 's/（未推送）//g')
           if [ -z "$NOTES" ]; then NOTES="- 常规更新"; fi
           printf '%s\n\n%s\n' "$NOTES" "(构建于 $(date -u '+%Y-%m-%d %H:%M UTC')，提交 ${GITHUB_SHA:0:7})" > notes.md
           echo "----- 更新内容 -----"; cat notes.md
