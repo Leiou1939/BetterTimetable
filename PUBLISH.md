@@ -99,3 +99,22 @@ App 取 tag 最后一段数字与自己的 `versionCode` 比较 —— **两处�
 <https://github.com/settings/tokens?type=beta> → 找到那个令牌 → **Delete**
 
 仓库本身不需要任何令牌；以后你在本机用 git 推送时，用新令牌或浏览器授权即可。
+
+---
+
+## 六、问题反馈的令牌（可选）
+
+App 内「设置 → 关于软件 → 反馈问题」有两种提交方式：
+
+| 情况 | 行为 |
+| --- | --- |
+| 构建时没有令牌 | 打开 GitHub 新建 Issue 页面，内容已预填，用户点提交 |
+| 构建时有令牌 | App 直接调 GitHub API 建 Issue，用户不用跳浏览器 |
+
+令牌只放在构建环境里，**不进仓库**：
+
+- 本地构建：`$env:FEEDBACK_TOKEN = "github_pat_xxx"` 再 `gradlew assembleRelease`
+- CI 构建：仓库 Settings → Secrets and variables → Actions → 新建 `FEEDBACK_TOKEN`
+
+**建议单独建一个「只勾 Issues: Read and write」的 fine-grained 令牌**，不要用带仓库写权限的令牌——
+它会被打包进 APK，任何人反编译都能拿到；只给 Issues 权限的话，最坏也只是有人刷 issue。

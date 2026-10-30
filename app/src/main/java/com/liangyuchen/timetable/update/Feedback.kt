@@ -3,6 +3,10 @@ package com.liangyuchen.timetable.update
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import com.liangyuchen.timetable.BuildConfig
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -77,6 +81,48 @@ object Feedback {
             .putInt(KEY_DAY_COUNT, count + 1)
             .putString(KEY_HASHES, hashes.joinToString(","))
             .apply()
+    }
+
+    /** 是否配置了静默令牌（没配置就走浏览器预填）。 */
+    fun canSubmitDirectly(): Boolean = BuildConfig.FEEDBACK_TOKEN.isNotBlank()
+
+    /**
+     * 直接调 GitHub API 建 Issue。
+     * @return 成功时返回 issue 链接；失败抛异常（调用方回退到浏览器）。
+     */
+    fun submitDirectly(repo: String, title: String, body: String): String {
+        val token = BuildConfig.FEEDBACK_TOKEN
+        if (token.isBlank()) throw IllegalStateException("没有配置反馈令牌")
+        val slug = repo.ifBlank { "Leiou1939/BetterTimetable" }
+        val payload = JSONObject()
+            .put("title", title)
+            .put("body", body)
+            .put("labels", org.json.JSONArray().put("bug"))
+            .toString()
+        val conn = (URL("https://api.github.com/repos/$slug/issues").openConnection()
+            as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 15_000
+            readTimeout = 20_000
+            doOutput = true
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("User-Agent", "TimetableApp-Feedback")
+        }
+        try {
+            conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            if (code !in 200..299) {
+                val msg = runCatching { JSONObject(text).optString("message") }.getOrDefault("")
+                throw IllegalStateException("HTTP $code ${msg}")
+            }
+            return JSONObject(text).optString("html_url", "")
+        } finally {
+            conn.disconnect()
+        }
     }
 
     /** 拼出 GitHub 新建 Issue 的地址（标题 + 正文 + 标签）。 */

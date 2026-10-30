@@ -9,6 +9,10 @@ val appVersionName = (project.findProperty("appVersionName") as String?) ?: "1.2
 // 仓库地址（owner/repo）：CI 里自动取 github.repository，本地可 -PupdateRepo=xxx 覆盖。
 // App 内若为空，还可以在「设置 → 检查更新」里手动填写。
 val updateRepo = (project.findProperty("updateRepo") as String?) ?: ""
+// 问题反馈用的静默令牌（只有 Issues 读写权限）。CI 从 secret 注入，
+// 本地构建用 -PfeedbackToken=xxx；为空时退回"浏览器预填"方式。
+val feedbackToken = (project.findProperty("feedbackToken") as String?)
+    ?: System.getenv("FEEDBACK_TOKEN") ?: ""
 
 android {
     namespace = "com.liangyuchen.timetable"
@@ -21,6 +25,7 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
+        buildConfigField("String", "FEEDBACK_TOKEN", "\"$feedbackToken\"")
 
     }
 

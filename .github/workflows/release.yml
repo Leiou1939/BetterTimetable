@@ -50,6 +50,9 @@ jobs:
 
       - name: 编译 release APK
         # updateRepo 决定 App 内「检查更新」去哪个仓库找 Release
+        # FEEDBACK_TOKEN 是「反馈问题」直连建 Issue 用的令牌（仓库 secret）
+        env:
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
         run: |
           gradle assembleRelease --stacktrace \
             -PappVersionCode=${{ steps.version.outputs.code }} \

@@ -26,6 +26,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +48,9 @@ fun FeedbackDialog(
     var description by remember { mutableStateOf("") }
     var contact by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var sending by remember { mutableStateOf(false) }
+    var doneUrl by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val body = Feedback.buildBody(
         description = description,
@@ -53,10 +60,7 @@ fun FeedbackDialog(
         school = schoolName,
     )
 
-    fun submit() {
-        val problem = Feedback.validate(context, description, contact.trim())
-        error = problem
-        if (problem != null) return
+    fun openInBrowser() {
         runCatching {
             val uri = Feedback.issueUri(repo, Feedback.buildTitle(description), body)
             context.startActivity(
@@ -70,13 +74,62 @@ fun FeedbackDialog(
         }
     }
 
+    fun submit() {
+        val problem = Feedback.validate(context, description, contact.trim())
+        error = problem
+        if (problem != null) return
+        if (!Feedback.canSubmitDirectly()) {
+            openInBrowser()
+            return
+        }
+        sending = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    Feedback.submitDirectly(repo, Feedback.buildTitle(description), body)
+                }
+            }
+            sending = false
+            result.onSuccess { url ->
+                Feedback.remember(context, description)
+                doneUrl = url
+            }.onFailure {
+                // 自动提交失败（令牌过期/没网/限流）→ 退回浏览器预填
+                error = "自动提交失败（${it.message ?: "未知原因"}），改用浏览器提交"
+                openInBrowser()
+            }
+        }
+    }
+
+    doneUrl?.let { url ->
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("反馈已提交", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("已经创建 GitHub Issue，感谢反馈！", fontSize = 13.sp)
+                    if (url.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(url, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            },
+            confirmButton = { Button(onClick = onDismiss) { Text("好") } },
+        )
+        return
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
                 Text("反馈问题", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "会在浏览器里打开 GitHub 的新建 Issue 页面，内容已填好，确认后提交",
+                    if (Feedback.canSubmitDirectly()) {
+                        "提交后会直接创建 GitHub Issue"
+                    } else {
+                        "会在浏览器里打开 GitHub 的新建 Issue 页面，内容已填好，确认后提交"
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -123,7 +176,15 @@ fun FeedbackDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { submit() }) { Text("去 GitHub 提交") }
+            Button(onClick = { submit() }, enabled = !sending) {
+                Text(
+                    when {
+                        sending -> "提交中…"
+                        Feedback.canSubmitDirectly() -> "提交反馈"
+                        else -> "去 GitHub 提交"
+                    },
+                )
+            }
         },
         dismissButton = {
             Row {
