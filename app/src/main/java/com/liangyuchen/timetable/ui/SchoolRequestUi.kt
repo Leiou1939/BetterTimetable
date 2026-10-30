@@ -141,14 +141,7 @@ fun SchoolRequestDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Column {
-                Text("没有你的学校？", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "各校教务系统导出的格式差别很大，部分学校还没做适配",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text("没有你的学校？", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(
@@ -194,7 +187,7 @@ fun SchoolRequestDialog(
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = "⚠️ 文件上传请注意保护个人隐私（学号、姓名等可先涂掉）",
+                    text = "⚠️ 文件上传请注意保护个人隐私",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.error,
                 )
