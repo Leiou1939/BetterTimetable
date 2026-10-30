@@ -185,15 +185,16 @@ fun SchoolPickerDialog(
     current: School,
     onDismiss: () -> Unit,
     onPick: (School) -> Unit,
+    onRequestSchool: () -> Unit = {},
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column {
-                Text("选择课表来源", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("选择学校", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "不同学校的课表格式不同，选错会解析不出课程",
-                    fontSize = 10.sp,
+                    "请导入从教务系统下载的文件",
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -231,6 +232,16 @@ fun SchoolPickerDialog(
                         }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "没有我的学校？",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onRequestSchool() }
+                        .padding(vertical = 8.dp),
+                )
             }
         },
         confirmButton = {},

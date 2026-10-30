@@ -149,6 +149,7 @@ fun TimetableScreen(
     var showSchoolPicker by remember { mutableStateOf(false) }
     var pendingSchool by remember { mutableStateOf(viewModel.importSchool) }
     var showFeedback by remember { mutableStateOf(false) }
+    var showSchoolRequest by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
     var updateToInstall by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -486,6 +487,18 @@ fun TimetableScreen(
                 pendingSchool = school
                 pdfPicker.launch(school.sourceKind.mimeTypes)
             },
+            onRequestSchool = {
+                showSchoolPicker = false
+                showSchoolRequest = true
+            },
+        )
+    }
+
+    if (showSchoolRequest) {
+        SchoolRequestDialog(
+            context = context,
+            repo = UpdateChecker.repo(context),
+            onDismiss = { showSchoolRequest = false },
         )
     }
 
