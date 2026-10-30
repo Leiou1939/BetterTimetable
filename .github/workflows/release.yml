@@ -42,7 +42,12 @@ jobs:
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f2); MINOR=${MINOR:-0}
           PATCH=$(echo "$VERSION" | cut -d. -f3); PATCH=${PATCH:-0}
-          CODE=$((MAJOR * 10000 + MINOR * 1000 + PATCH))
+          # 有 VERSION_CODE 文件时以它为准（保证能覆盖手机上已装的更高 versionCode）
+          if [ -f VERSION_CODE ]; then
+            CODE=$(cat VERSION_CODE | tr -d '[:space:]')
+          else
+            CODE=$((MAJOR * 10000 + MINOR * 1000 + PATCH))
+          fi
           echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "code=$CODE" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
