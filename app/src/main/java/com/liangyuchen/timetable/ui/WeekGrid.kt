@@ -1,5 +1,6 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -192,14 +192,14 @@ fun WeekGrid(
         val countSize = if (narrow) 8.sp else 9.sp
         val timeSize = if (metrics.timeCol < 32.dp) 8.sp else 9.sp
 
-        val vScroll = rememberScrollState()
         val hScroll = rememberScrollState()
 
+        // 课表锁死：不再纵向滚动，行高在 gridMetrics 里按可用高度算好，
+        // 整张表正好填满一屏（屏太矮时会被裁掉，而不是让用户上下滑）。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // 左右滑动切周（只在 7 天已经放得下时启用，避免和横向滚动打架）
-                .verticalScroll(vScroll),
+                .fillMaxHeight(),
         ) {
             // 左列：节次 + 上下课时间（永远不横向滚动）
             Column(
@@ -447,23 +447,28 @@ private fun DayHeaderRow(
                     .clickable { onSelectDay(day) },   // 点表头即可切到日视图
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(if (headerHeight < HEADER_HEIGHT) 3.dp else 6.dp))
+                Spacer(Modifier.height(if (headerHeight < HEADER_HEIGHT) 2.dp else 4.dp))
+                // 三行显式给行高：否则会继承主题行高，「N 节」被挤出表头
                 Text(
                     text = ScheduleCalc.weekdayShortByIndex(day).removePrefix("周"),
                     fontSize = weekdaySize,
+                    lineHeight = weekdaySize * 1.0f,
                     color = fg.copy(alpha = 0.85f),
                     maxLines = 1,
                 )
                 Text(
                     text = date.dayOfMonth.toString(),
                     fontSize = dateSize,
+                    lineHeight = dateSize * 1.02f,
                     fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = fg,
                     maxLines = 1,
                 )
+                // 当天的课程门数（一门跨两节的课算一门）
                 Text(
                     text = if (count == 0) " " else "$count 节",
                     fontSize = countSize,
+                    lineHeight = countSize * 1.05f,
                     color = fg.copy(alpha = 0.75f),
                     maxLines = 1,
                 )
