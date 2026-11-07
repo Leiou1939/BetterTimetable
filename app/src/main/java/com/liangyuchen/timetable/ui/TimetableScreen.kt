@@ -1,5 +1,9 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateContentSize
+import androidx.compose.material3.Switch
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.AccessTime
@@ -869,7 +873,9 @@ private fun CalendarPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择要写入的日历", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     text = "每节课会写成一条日程，并带上提前提醒；之后由系统日历负责到点通知。" +
                         "选一个你在日历 App 里能看到的日历。",
@@ -1055,7 +1061,14 @@ private fun SettingsDialog(
         onDismissRequest = onDismiss,
         title = { Text("设置", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    // 切分类时内容高度会变：弹窗高度补间 260ms，避免瞬间跳动
+                    .animateContentSize(
+                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    ),
+            ) {
                 // 顶部分类：一排图标，点哪个就显示哪一类设置
                 var section by remember { mutableStateOf(SettingsSection.SCHEDULE) }
                 SettingsTabs(selected = section, onSelect = { section = it })
@@ -1063,24 +1076,7 @@ private fun SettingsDialog(
 
                 when (section) {
                     SettingsSection.SCHEDULE -> {
-                        OutlinedButton(
-                            onClick = onImportPdf,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("导入课表（替换当前课表）", fontSize = 13.sp)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onGoToCurrentWeek,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Filled.Today, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("回到本周（当前第 $currentWeek 周）", fontSize = 13.sp)
-                        }
-                        Spacer(Modifier.height(14.dp))
+                        // 学期信息放在最上面：这两项决定了整个课表的时间轴
                         Text("开学第一周（周一）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(6.dp))
                         OutlinedButton(onClick = { showDatePicker = true }) {
@@ -1100,6 +1096,24 @@ private fun SettingsDialog(
                                 range = 8..30,
                                 onChange = onTotalWeeksChange,
                             )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = onImportPdf,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("导入课表（替换当前课表）", fontSize = 13.sp)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onGoToCurrentWeek,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Filled.Today, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("回到本周（当前第 $currentWeek 周）", fontSize = 13.sp)
                         }
                     }
 
@@ -1140,10 +1154,13 @@ private fun SettingsDialog(
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
                         ) {
-                            Checkbox(checked = sync.autoSync, onCheckedChange = onAutoSyncChange)
-                            Text("导入课表后自动同步到日历", fontSize = 11.sp)
+                            Text("导入课表后自动同步到日历", fontSize = 12.sp)
+                            Spacer(Modifier.weight(1f))
+                            Switch(checked = sync.autoSync, onCheckedChange = onAutoSyncChange)
                         }
                         Spacer(Modifier.height(10.dp))
                         OutlinedButton(
