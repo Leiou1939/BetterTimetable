@@ -93,6 +93,7 @@ fun FriendsDialog(
     var editingFriend by remember { mutableStateOf<Friend?>(null) }
     var editingMe by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
+    var quickAdd by remember { mutableStateOf(false) }
 
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
@@ -122,8 +123,6 @@ fun FriendsDialog(
                     .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
-                SectionLabel("我")
-                Spacer(Modifier.height(6.dp))
                 PersonRow(
                     name = me.name,
                     colorIndex = me.colorIndex,
@@ -134,9 +133,7 @@ fun FriendsDialog(
                 )
 
                 if (friends.isNotEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    SectionLabel("同学")
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(12.dp))
                     friends.forEach { friend ->
                         PersonRow(
                             name = friend.nickname,
@@ -151,7 +148,10 @@ fun FriendsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { adding = true }) { Text("添加同学") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { adding = true }) { Text("手动添加", fontSize = 13.sp) }
+                Button(onClick = { quickAdd = true }) { Text("快速添加", fontSize = 13.sp) }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
     )
@@ -200,15 +200,6 @@ fun FriendsDialog(
     }
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
 
 /**
  * 一个人一行：左边头像，中间名字 / 状态说明，右边状态标签。
