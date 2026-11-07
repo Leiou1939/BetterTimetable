@@ -245,6 +245,28 @@ fun TimetableScreen(
         if (pendingCalendarAction != null) onCalendarActionFinished()
     }
 
+    // 顶栏的同步按钮移到了设置里，这里保留同一套流程（权限 → 选日历 → 写入）
+    val startCalendarSync: () -> Unit = {
+        if (CalendarSync.hasPermission(context)) {
+            val saved = syncPrefs
+            if (saved.hasCalendar) {
+                val account = CalendarSync.listCalendars(context)
+                    .firstOrNull { it.id == saved.calendarId }
+                if (account != null) {
+                    runSync(account)
+                } else {
+                    calendars = CalendarSync.listCalendars(context)
+                    showCalendarPicker = true
+                }
+            } else {
+                calendars = CalendarSync.listCalendars(context)
+                showCalendarPicker = true
+            }
+        } else {
+            onCalendarPermissionNeeded(PendingCalendarAction.SYNC)
+        }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbar) },
@@ -295,36 +317,6 @@ fun TimetableScreen(
                     if (!compactBar) {
                         IconButton(onClick = { showSchoolPicker = true }) {
                             Icon(Icons.Filled.FileOpen, contentDescription = "导入课表")
-                        }
-                    }
-                    IconButton(onClick = {
-                        if (CalendarSync.hasPermission(context)) {
-                            // 记住过日历就一键同步；没记住过才弹选择框
-                            val saved = syncPrefs
-                            if (saved.hasCalendar) {
-                                val account = CalendarSync.listCalendars(context)
-                                    .firstOrNull { it.id == saved.calendarId }
-                                if (account != null) {
-                                    runSync(account)
-                                } else {
-                                    calendars = CalendarSync.listCalendars(context)
-                                    showCalendarPicker = true
-                                }
-                            } else {
-                                calendars = CalendarSync.listCalendars(context)
-                                showCalendarPicker = true
-                            }
-                        } else {
-                            onCalendarPermissionNeeded(PendingCalendarAction.SYNC)
-                        }
-                    }, enabled = !syncing) {
-                        if (syncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(Icons.Filled.Sync, contentDescription = "同步到系统日历")
                         }
                     }
                     IconButton(onClick = { showSettings = true }) {
@@ -457,6 +449,8 @@ fun TimetableScreen(
                 SyncSettings.setAutoSync(context, enabled)
                 syncPrefs = SyncSettings.load(context)
             },
+            onSyncCalendar = startCalendarSync,
+            syncing = syncing,
             onClearCalendarEvents = {
                 scope.launch {
                     val removed = withContext(Dispatchers.IO) {
@@ -956,6 +950,8 @@ private fun SettingsDialog(
     onReminderMinutesChange: (Int) -> Unit,
     onAutoSyncChange: (Boolean) -> Unit,
     onClearCalendarEvents: () -> Unit,
+    onSyncCalendar: () -> Unit,
+    syncing: Boolean,
     onCheckUpdate: () -> Unit,
     onOpenRepo: () -> Unit,
     onOpenFeedback: () -> Unit,
@@ -1082,26 +1078,26 @@ private fun SettingsDialog(
                 }
 
                 Spacer(Modifier.height(10.dp))
-                Text("学期总周数：${data.totalWeeks}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    listOf(16, 18, 20, 22, 24).forEach { n ->
-                        val selected = data.totalWeeks == n
-                        if (selected) {
-                            Button(onClick = { onTotalWeeksChange(n) }) {
-                                Text(n.toString(), fontSize = 12.sp)
-                            }
-                        } else {
-                            OutlinedButton(onClick = { onTotalWeeksChange(n) }) {
-                                Text(n.toString(), fontSize = 12.sp)
-                            }
-                        }
-                    }
+                    Text("学期总周数", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Stepper(
+                        value = data.totalWeeks,
+                        suffix = " 周",
+                        step = 1,
+                        range = 8..30,
+                        onChange = onTotalWeeksChange,
+                    )
                 }
+                Text(
+                    text = "教务系统里写的是几周就填几周",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
 
                 Spacer(Modifier.height(10.dp))
                 Text("作息时间", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -1126,31 +1122,46 @@ private fun SettingsDialog(
                 Spacer(Modifier.height(14.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(10.dp))
-                Text("日历提醒", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                ) {
-                    SyncSettings.REMINDER_CHOICES.forEach { minutes ->
-                        val selected = sync.reminderMinutes == minutes
-                        if (selected) {
-                            Button(onClick = { onReminderMinutesChange(minutes) }) {
-                                Text(if (minutes == 0) "不提醒" else "${minutes}分", fontSize = 11.sp)
-                            }
-                        } else {
-                            OutlinedButton(onClick = { onReminderMinutesChange(minutes) }) {
-                                Text(if (minutes == 0) "不提醒" else "${minutes}分", fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("日历提醒", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Stepper(
+                        value = sync.reminderMinutes,
+                        suffix = if (sync.reminderMinutes == 0) "不提醒" else "分钟前",
+                        step = 5,
+                        range = 0..60,
+                        onChange = onReminderMinutesChange,
+                    )
+                }
+                Text(
+                    text = if (sync.reminderMinutes == 0) {
+                        "日程照常写入，只是不加提醒"
+                    } else {
+                        "上课前 ${sync.reminderMinutes} 分钟提醒"
+                    },
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 6.dp),
                 ) {
                     Checkbox(checked = sync.autoSync, onCheckedChange = onAutoSyncChange)
                     Text("导入课表后自动同步到日历", fontSize = 11.sp)
+                }
+                // 原顶栏的同步按钮挪到这里，走同一套权限 / 选日历流程
+                Button(
+                    onClick = onSyncCalendar,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    enabled = !syncing,
+                ) {
+                    Text(if (syncing) "正在同步…" else "同步到系统日历", fontSize = 12.sp)
                 }
                 TextButton(onClick = onClearCalendarEvents) {
                     Text("清空本 App 写入的日程", fontSize = 11.sp)
@@ -1301,6 +1312,50 @@ private fun EmptyScheduleGuide(onImport: () -> Unit, modifier: Modifier = Modifi
             Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("导入课表")
+        }
+    }
+}
+
+/**
+ * 一个小步进器：− 值 + 。用于「学期总周数」「提前几分钟提醒」这类量值。
+ * 到边界自动禁用对应按钮，点数字本身不弹键盘（避免输入法挡住弹窗）。
+ */
+@Composable
+private fun Stepper(
+    value: Int,
+    suffix: String,
+    step: Int,
+    range: IntRange,
+    onChange: (Int) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(
+            onClick = { onChange((value - step).coerceIn(range.first, range.last)) },
+            enabled = value > range.first,
+            shape = MaterialTheme.shapes.small,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            modifier = Modifier.height(32.dp),
+        ) {
+            Text("−", fontSize = 15.sp)
+        }
+        Text(
+            text = if (suffix.startsWith("分钟")) "$value $suffix" else "$value$suffix",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .widthIn(min = 74.dp)
+                .padding(horizontal = 8.dp),
+            textAlign = TextAlign.Center,
+        )
+        OutlinedButton(
+            onClick = { onChange((value + step).coerceIn(range.first, range.last)) },
+            enabled = value < range.last,
+            shape = MaterialTheme.shapes.small,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            modifier = Modifier.height(32.dp),
+        ) {
+            Text("+", fontSize = 15.sp)
         }
     }
 }
