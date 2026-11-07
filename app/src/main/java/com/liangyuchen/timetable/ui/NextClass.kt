@@ -92,6 +92,16 @@ internal fun countdownText(start: LocalTime, now: LocalTime): String {
     }
 }
 
+/** 正在上课时：还有多久下课。 */
+internal fun untilEndText(end: LocalTime, now: LocalTime): String {
+    val minutes = Duration.between(now, end).toMinutes()
+    return when {
+        minutes >= 60 -> "${minutes / 60} 小时 ${minutes % 60} 分后下课"
+        minutes >= 1 -> "$minutes 分钟后下课"
+        else -> "马上下课"
+    }
+}
+
 /** 课程在几天后：「今天」「明天」「周三」。 */
 private fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
     today -> "今天"
@@ -182,7 +192,7 @@ fun NextClassBanner(
         Spacer(Modifier.weight(1f))
         Text(
             text = when {
-                inProgress -> "第 ${next.course.periodFrom}-${next.course.periodTo} 节"
+                inProgress -> untilEndText(next.end, now)
                 next.date == today -> countdownText(next.start, now)
                 else -> "%02d:%02d".format(next.start.hour, next.start.minute)
             },
