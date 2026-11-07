@@ -4,7 +4,10 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,14 +24,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -77,6 +76,7 @@ private fun avatarColor(index: Int): Color =
  * 同学：加一个昵称 + 他/她的课表，一眼看出谁在上课、谁有空。
  *
  * 长按任意一行可以改名字、头像色；同学的还能换学校/换课表、删除。
+ * 添加同学走单独的窗口。
  */
 @Composable
 fun FriendsDialog(
@@ -92,7 +92,6 @@ fun FriendsDialog(
     var editingMe by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
 
-    // 每 30 秒刷新一次，状态跟着时间走
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -147,34 +146,26 @@ fun FriendsDialog(
                         Spacer(Modifier.height(8.dp))
                     }
                 }
-
-                if (adding) {
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                    Spacer(Modifier.height(12.dp))
-                    AddFriendForm(
-                        context = context,
-                        myData = myData,
-                        onAdded = {
-                            friends = store.load()
-                            adding = false
-                        },
-                        onCancel = { adding = false },
-                    )
-                }
             }
         },
         confirmButton = {
-            if (adding) {
-                TextButton(onClick = { adding = false }) { Text("取消添加") }
-            } else {
-                Button(onClick = { adding = true }) { Text("添加同学") }
-            }
+            Button(onClick = { adding = true }) { Text("添加同学") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
     )
 
-    // 我的编辑窗
+    if (adding) {
+        AddFriendDialog(
+            context = context,
+            myData = myData,
+            onDismiss = { adding = false },
+            onAdded = {
+                friends = store.load()
+                adding = false
+            },
+        )
+    }
+
     if (editingMe) {
         MeEditorDialog(
             me = me,
@@ -187,7 +178,6 @@ fun FriendsDialog(
         )
     }
 
-    // 同学的编辑窗
     editingFriend?.let { friend ->
         FriendEditorDialog(
             context = context,
@@ -220,10 +210,12 @@ private fun SectionLabel(text: String) {
 
 /**
  * 一个人一行：左边头像，中间名字 / 状态说明，右边状态标签。
- * 长按进入编辑；上课中时头像和标签用课程色。
+ *
+ * 颜色只用**头像色**，不跟着课程色变 —— 否则同一个人每节课都在变色。
+ * 长按进入编辑。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun PersonRow(
     name: String,
     colorIndex: Int,
@@ -232,25 +224,8 @@ private fun PersonRow(
     highlight: Boolean = false,
     onLongPress: () -> Unit,
 ) {
+    val mine = avatarColor(colorIndex)
     val inClass = status?.inClass == true
-    val courseColor = status?.let { colorFor(it.accentKey) }
-    val meColor = avatarColor(colorIndex)
-    val avatarBg = if (inClass && courseColor != null) {
-        courseColor.copy(alpha = 0.18f)
-    } else {
-        meColor.copy(alpha = 0.16f)
-    }
-    val avatarFg = if (inClass && courseColor != null) courseColor else meColor
-    val chipBg = if (inClass && courseColor != null) {
-        courseColor.copy(alpha = 0.14f)
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val chipFg = if (inClass && courseColor != null) {
-        courseColor
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -267,7 +242,7 @@ private fun PersonRow(
             .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .padding(horizontal = 8.dp, vertical = 8.dp),
     ) {
-        Avatar(name = name, bg = avatarBg, fg = avatarFg)
+        Avatar(name = name, bg = mine.copy(alpha = 0.16f), fg = mine)
         Spacer(Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
@@ -308,10 +283,10 @@ private fun PersonRow(
             text = status?.label ?: "—",
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = chipFg,
+            color = mine,
             modifier = Modifier
                 .clip(MaterialTheme.shapes.small)
-                .background(chipBg)
+                .background(mine.copy(alpha = if (inClass) 0.16f else 0.08f))
                 .padding(horizontal = 9.dp, vertical = 4.dp),
         )
     }
@@ -335,10 +310,10 @@ private fun Avatar(name: String, bg: Color, fg: Color, size: Int = 34) {
     }
 }
 
-/** 头像配色选择：一排小圆点。 */
+/** 头像配色选择：一排色块，选中的打勾。 */
 @Composable
 private fun ColorPicker(selected: Int, onSelect: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AVATAR_PALETTE.indices.forEach { index ->
             val color = avatarColor(index)
             val isSelected = index == selected
@@ -363,75 +338,96 @@ private fun ColorPicker(selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
+/** 学校选择：两列卡片，选中的描边 + 打勾。 */
 @Composable
-private fun SchoolDropdown(school: School, onSelect: (School) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .clickable { expanded = true }
-                .padding(horizontal = 12.dp),
-        ) {
-            Text(school.displayName, fontSize = 14.sp)
-            Spacer(Modifier.width(6.dp))
-            Text(
-                school.sourceKind.label,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.weight(1f))
-            Icon(
-                Icons.Filled.ArrowDropDown,
-                contentDescription = "选择学校",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            School.entries.forEach { s ->
-                DropdownMenuItem(
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(s.displayName, fontSize = 14.sp)
-                            Spacer(Modifier.width(6.dp))
+private fun SchoolPicker(current: School, onSelect: (School) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        School.entries.chunked(2).forEach { rowSchools ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                rowSchools.forEach { s ->
+                    val selected = s == current
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(
+                                if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                },
+                            )
+                            .then(
+                                if (selected) {
+                                    Modifier.border(
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                                        MaterialTheme.shapes.small,
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clickable { onSelect(s) }
+                            .padding(horizontal = 8.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                s.displayName,
+                                fontSize = 12.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                             Text(
                                 s.sourceKind.label,
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    },
-                    onClick = {
-                        onSelect(s)
-                        expanded = false
-                    },
-                    trailingIcon = {
-                        if (s == school) {
+                        if (selected) {
                             Icon(
                                 Icons.Filled.Check,
                                 contentDescription = "已选择",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(16.dp),
                             )
                         }
-                    },
-                )
+                    }
+                }
+                if (rowSchools.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
 }
 
-/** 添加同学：昵称 + 学校 + 选文件。 */
 @Composable
-private fun AddFriendForm(
+private fun LabeledField(label: String, content: @Composable () -> Unit) {
+    Text(
+        label,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+    )
+    content()
+}
+
+/** 添加同学：独立窗口。 */
+@Composable
+private fun AddFriendDialog(
     context: Context,
     myData: ScheduleData,
+    onDismiss: () -> Unit,
     onAdded: () -> Unit,
-    onCancel: () -> Unit,
 ) {
     val store = remember { FriendStore(context) }
     var nickname by remember { mutableStateOf("") }
@@ -472,47 +468,54 @@ private fun AddFriendForm(
         }
     }
 
-    LabeledField("同学昵称") {
-        OutlinedTextField(
-            value = nickname,
-            onValueChange = { nickname = it.take(12) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-    LabeledField("头像") { ColorPicker(colorIndex) { colorIndex = it } }
-    LabeledField("学校") { SchoolDropdown(school) { school = it } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("添加同学", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(
+                        name = nickname.ifBlank { "同" },
+                        bg = avatarColor(colorIndex).copy(alpha = 0.16f),
+                        fg = avatarColor(colorIndex),
+                        size = 44,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedTextField(
+                        value = nickname,
+                        onValueChange = { nickname = it.take(12) },
+                        singleLine = true,
+                        label = { Text("昵称", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                LabeledField("头像色") { ColorPicker(colorIndex) { colorIndex = it } }
+                LabeledField("学校 / 课表格式") { SchoolPicker(school) { school = it } }
 
-    OutlinedButton(
-        onClick = { picker.launch(school.sourceKind.mimeTypes) },
-        enabled = !importing,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        if (importing) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(if (importing) "正在读取…" else "选择他/她的课表文件", fontSize = 13.sp)
-    }
-    error?.let {
-        Spacer(Modifier.height(8.dp))
-        Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
-    }
-    TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-        Text("取消添加", fontSize = 12.sp)
-    }
-}
-
-@Composable
-private fun LabeledField(label: String, content: @Composable () -> Unit) {
-    Text(
-        label,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = 10.dp, bottom = 6.dp),
+                Spacer(Modifier.height(14.dp))
+                OutlinedButton(
+                    onClick = { picker.launch(school.sourceKind.mimeTypes) },
+                    enabled = !importing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (importing) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (importing) "正在读取…" else "选择他/她的课表文件", fontSize = 13.sp)
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
-    content()
 }
 
 /** 编辑「我」：名字 + 头像色。 */
@@ -624,7 +627,8 @@ private fun FriendEditorDialog(
                     )
                 }
                 LabeledField("头像色") { ColorPicker(colorIndex) { colorIndex = it } }
-                LabeledField("学校") { SchoolDropdown(school) { school = it } }
+                LabeledField("学校 / 课表格式") { SchoolPicker(school) { school = it } }
+                Spacer(Modifier.height(6.dp))
                 OutlinedButton(
                     onClick = { picker.launch(school.sourceKind.mimeTypes) },
                     enabled = !importing,
@@ -641,10 +645,7 @@ private fun FriendEditorDialog(
                     Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = onDelete,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
                     Text("删除这位同学", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                 }
             }
