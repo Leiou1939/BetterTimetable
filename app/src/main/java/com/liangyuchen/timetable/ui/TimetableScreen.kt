@@ -526,7 +526,6 @@ fun TimetableScreen(
     if (showFriends) {
         FriendsDialog(
             context = context,
-            myName = "我",
             myData = data,
             today = today,
             onDismiss = { showFriends = false },
