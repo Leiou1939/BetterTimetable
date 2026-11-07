@@ -1,5 +1,10 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.foundation.layout.ColumnScope
 import android.content.Context
 import androidx.compose.material.icons.filled.Code
 import android.net.Uri
@@ -1048,150 +1053,144 @@ private fun SettingsDialog(
         title = { Text("设置", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedButton(
-                    onClick = onImportPdf,
-                    modifier = Modifier.fillMaxWidth(),
+                // 折叠分区：一次只展开一块，设置项多也不至于一屏塞满
+                var openSection by remember { mutableStateOf("课表") }
+
+                SettingsCard(
+                    title = "课表",
+                    expanded = openSection == "课表",
+                    onToggle = { openSection = if (openSection == "课表") "" else "课表" },
                 ) {
-                    Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("导入课表（替换当前课表）", fontSize = 13.sp)
-                }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(
-                    onClick = onGoToCurrentWeek,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.Today, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("回到本周（当前第 $currentWeek 周）", fontSize = 13.sp)
-                }
-
-                Spacer(Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                Spacer(Modifier.height(10.dp))
-
-                // ---- 学期设置：开学日、总周数、作息 三块挨在一起 ----
-                Text("开学第一周（周一）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                OutlinedButton(onClick = { showDatePicker = true }) {
-                    Text(data.termStartDate, fontSize = 14.sp)
-                }
-
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("学期总周数", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.weight(1f))
-                    Stepper(
-                        value = data.totalWeeks,
-                        suffix = " 周",
-                        step = 1,
-                        range = 8..30,
-                        onChange = onTotalWeeksChange,
-                    )
-                }
-                Text(
-                    text = "教务系统里写的是几周就填几周",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-
-                Spacer(Modifier.height(10.dp))
-                Text("作息时间", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(2.dp))
-                data.periods.sortedBy { it.index }.forEach { period ->
+                    OutlinedButton(
+                        onClick = onImportPdf,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("导入课表（替换当前课表）", fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onGoToCurrentWeek,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.Today, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("回到本周（当前第 $currentWeek 周）", fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text("开学第一周（周一）", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = { showDatePicker = true }) {
+                        Text(data.termStartDate, fontSize = 14.sp)
+                    }
+                    Spacer(Modifier.height(12.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(vertical = 1.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(
-                            "第 ${period.index} 节",
-                            fontSize = 11.sp,
-                            modifier = Modifier.width(54.dp),
+                        Text("学期总周数", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.weight(1f))
+                        Stepper(
+                            value = data.totalWeeks,
+                            suffix = " 周",
+                            step = 1,
+                            range = 8..30,
+                            onChange = onTotalWeeksChange,
                         )
-                        TimeChip(period.start) { editing = period.index to true }
-                        Text("–", fontSize = 11.sp)
-                        TimeChip(period.end) { editing = period.index to false }
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(10.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
+                SettingsCard(
+                    title = "作息时间",
+                    expanded = openSection == "作息",
+                    onToggle = { openSection = if (openSection == "作息") "" else "作息" },
                 ) {
-                    Text("日历提醒", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.weight(1f))
-                    Stepper(
-                        value = sync.reminderMinutes,
-                        suffix = if (sync.reminderMinutes == 0) "不提醒" else "分钟前",
-                        step = 5,
-                        range = 0..60,
-                        onChange = onReminderMinutesChange,
-                    )
-                }
-                Text(
-                    text = if (sync.reminderMinutes == 0) {
-                        "日程照常写入，只是不加提醒"
-                    } else {
-                        "上课前 ${sync.reminderMinutes} 分钟提醒"
-                    },
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 6.dp),
-                ) {
-                    Checkbox(checked = sync.autoSync, onCheckedChange = onAutoSyncChange)
-                    Text("导入课表后自动同步到日历", fontSize = 11.sp)
-                }
-                // 原顶栏的同步按钮挪到这里，走同一套权限 / 选日历流程
-                Button(
-                    onClick = onSyncCalendar,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp),
-                    enabled = !syncing,
-                ) {
-                    Text(if (syncing) "正在同步…" else "同步到系统日历", fontSize = 12.sp)
-                }
-                TextButton(onClick = onClearCalendarEvents) {
-                    Text("清空本 App 写入的日程", fontSize = 11.sp)
+                    data.periods.sortedBy { it.index }.forEach { period ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        ) {
+                            Text(
+                                "第 ${period.index} 节",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(54.dp),
+                            )
+                            TimeChip(period.start) { editing = period.index to true }
+                            Text("–", fontSize = 11.sp)
+                            TimeChip(period.end) { editing = period.index to false }
+                        }
+                    }
                 }
 
-                // ---- 关于软件：放在最下面 ----
-                Spacer(Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
                 Spacer(Modifier.height(10.dp))
-                Text("关于软件", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                OutlinedButton(onClick = onCheckUpdate, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("检查更新", fontSize = 13.sp)
-                }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = onOpenRepo, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("GitHub 仓库", fontSize = 13.sp)
-                }
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(
-                    onClick = onOpenFeedback,
-                    modifier = Modifier.fillMaxWidth(),
+                SettingsCard(
+                    title = "日历提醒",
+                    expanded = openSection == "日历",
+                    onToggle = { openSection = if (openSection == "日历") "" else "日历" },
                 ) {
-                    Icon(Icons.Filled.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("反馈问题", fontSize = 13.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("提前提醒", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.weight(1f))
+                        Stepper(
+                            value = sync.reminderMinutes,
+                            suffix = if (sync.reminderMinutes == 0) "不提醒" else "分钟前",
+                            step = 5,
+                            range = 0..60,
+                            onChange = onReminderMinutesChange,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 6.dp),
+                    ) {
+                        Checkbox(checked = sync.autoSync, onCheckedChange = onAutoSyncChange)
+                        Text("导入课表后自动同步到日历", fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onSyncCalendar,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !syncing,
+                    ) {
+                        Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (syncing) "正在同步…" else "同步到系统日历", fontSize = 13.sp)
+                    }
+                    TextButton(onClick = onClearCalendarEvents) {
+                        Text("清空本 App 写入的日程", fontSize = 11.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                SettingsCard(
+                    title = "关于软件",
+                    expanded = openSection == "关于",
+                    onToggle = { openSection = if (openSection == "关于") "" else "关于" },
+                ) {
+                    OutlinedButton(onClick = onCheckUpdate, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("检查更新", fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onOpenRepo, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("GitHub 仓库", fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onOpenFeedback, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("反馈问题", fontSize = 13.sp)
+                    }
                 }
             }
         },
@@ -1356,6 +1355,49 @@ private fun Stepper(
             modifier = Modifier.height(32.dp),
         ) {
             Text("+", fontSize = 15.sp)
+        }
+    }
+}
+
+/**
+ * 设置里的折叠分区：标题一行，点一下展开/收起。
+ * 细边框、无阴影，和表格的细线风格一致。
+ */
+@Composable
+private fun SettingsCard(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        if (expanded) {
+            Column(
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                content = content,
+            )
         }
     }
 }
