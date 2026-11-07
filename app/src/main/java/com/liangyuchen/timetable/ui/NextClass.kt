@@ -36,35 +36,47 @@ internal val NEXT_BANNER_HEIGHT = 34.dp
 
 internal data class NextClass(
     val course: Course,
+    val date: LocalDate,
     val start: LocalTime,
     val end: LocalTime,
 )
 
 /**
- * 今天「还没下课」的第一门课。正在上的课也算（提示语会变成"正在上"）。
- * 当天没课、或者都上完了，返回 null。
+ * 最近的一节课：从今天此刻开始往后找，最多看 7 天。
+ *
+ * 和"当前翻到第几周"无关 —— 翻页时提示条内容不会变。
+ * 正在上的课也会优先返回（提示语会变成"正在上"）。
  */
-internal fun nextClassToday(
+internal fun nearestClass(
     data: ScheduleData,
-    week: Int,
     today: LocalDate,
     now: LocalTime,
 ): NextClass? {
-    if (week != ScheduleCalc.weekOf(data, today)) return null
-    val dayIndex = ScheduleCalc.dayIndexOf(today)
-    if (dayIndex !in 0..6) return null
     val byIndex = data.periods.associateBy { it.index }
-    return data.coursesOn(dayIndex, week)
-        .mapNotNull { course ->
-            val start = byIndex[course.periodFrom]?.start?.let(::parseClock) ?: return@mapNotNull null
-            val endText = byIndex[course.periodTo]?.end
-                ?: byIndex[course.periodFrom]?.end
-                ?: return@mapNotNull null
-            val end = parseClock(endText) ?: return@mapNotNull null
-            if (end <= now) return@mapNotNull null
-            NextClass(course, start, end)
-        }
-        .minByOrNull { it.start }
+    for (offset in 0..7) {
+        val date = today.plusDays(offset.toLong())
+        val week = ScheduleCalc.weekOf(data, date)
+        if (week !in 1..data.totalWeeks.coerceAtLeast(1)) continue
+        val dayIndex = ScheduleCalc.dayIndexOf(date)
+        if (dayIndex !in 0..6) continue
+
+        val found = data.coursesOn(dayIndex, week)
+            .mapNotNull { course ->
+                val start = byIndex[course.periodFrom]?.start?.let(::parseClock)
+                    ?: return@mapNotNull null
+                val endText = byIndex[course.periodTo]?.end
+                    ?: byIndex[course.periodFrom]?.end
+                    ?: return@mapNotNull null
+                val end = parseClock(endText) ?: return@mapNotNull null
+                // 今天的课要"还没下课"；以后的课全算
+                if (offset == 0 && end <= now) return@mapNotNull null
+                NextClass(course, date, start, end)
+            }
+            .minByOrNull { it.start }
+
+        if (found != null) return found
+    }
+    return null
 }
 
 private fun parseClock(text: String): LocalTime? =
@@ -80,19 +92,25 @@ internal fun countdownText(start: LocalTime, now: LocalTime): String {
     }
 }
 
+/** 课程在几天后：「今天」「明天」「周三」。 */
+private fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
+    today -> "今天"
+    today.plusDays(1) -> "明天"
+    else -> ScheduleCalc.weekdayShort(date)
+}
+
 /**
- * 「下一节」提示条：教室紧跟在科目后面，倒计时靠右。
+ * 「下一节」提示条：最近的一节课，与当前翻到第几周无关。
  *
- * 放在 WeekGrid 外面（TimetableScreen 的列里），所以翻周时它固定不动。
+ * 教室紧跟在科目后面，时间信息靠右。
  */
 @Composable
 fun NextClassBanner(
     data: ScheduleData,
-    week: Int,
     today: LocalDate,
     modifier: Modifier = Modifier,
 ) {
-    // 每分钟刷新一次倒计时
+    // 每 30 秒刷新一次倒计时
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -101,9 +119,9 @@ fun NextClassBanner(
         }
     }
     val now = remember(tick) { LocalTime.now() }
-    val next = remember(week, today, tick) { nextClassToday(data, week, today, now) }
+    val next = remember(today, tick) { nearestClass(data, today, now) }
 
-    val inProgress = next != null && now >= next.start && now < next.end
+    val inProgress = next != null && next.date == today && now >= next.start && now < next.end
     val accent = next?.let { colorFor(it.course.colorKey) }
         ?: MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -124,7 +142,7 @@ fun NextClassBanner(
         Spacer(Modifier.width(6.dp))
         if (next == null) {
             Text(
-                text = "今天没有课了",
+                text = "最近一周没有课了",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -132,7 +150,11 @@ fun NextClassBanner(
             return@Row
         }
         Text(
-            text = if (inProgress) "正在上" else "下一节",
+            text = when {
+                inProgress -> "正在上"
+                next.date == today -> "下一节"
+                else -> dayLabel(next.date, today)
+            },
             fontSize = 10.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -159,10 +181,10 @@ fun NextClassBanner(
         }
         Spacer(Modifier.weight(1f))
         Text(
-            text = if (inProgress) {
-                "第 ${next.course.periodFrom}-${next.course.periodTo} 节"
-            } else {
-                countdownText(next.start, now)
+            text = when {
+                inProgress -> "第 ${next.course.periodFrom}-${next.course.periodTo} 节"
+                next.date == today -> countdownText(next.start, now)
+                else -> "%02d:%02d".format(next.start.hour, next.start.minute)
             },
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,

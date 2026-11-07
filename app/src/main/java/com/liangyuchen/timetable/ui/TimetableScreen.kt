@@ -343,9 +343,9 @@ fun TimetableScreen(
         ) {
             // 「下一节」常驻在顶部：翻周、切日视图都不动
             if (viewModel.hasCourses) {
+                // 与当前翻到第几周无关：永远显示最近的一节课
                 NextClassBanner(
                     data = data,
-                    week = viewModel.week,
                     today = today,
                 )
             }
