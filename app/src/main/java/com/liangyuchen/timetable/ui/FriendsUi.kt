@@ -1,5 +1,7 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.ChevronRight
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -338,74 +340,121 @@ private fun ColorPicker(selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** 学校选择：两列卡片，选中的描边 + 打勾。 */
+/**
+ * 学校选择：一行显示当前学校，点开是干净的选择窗。
+ *
+ * 卡片网格太满、下拉菜单太廉价，这版走"系统设置里那种"简洁路线：
+ * 细边框一行 + 右侧学校名 + 一个箭头，点开一个只有七行的选择窗。
+ */
 @Composable
-private fun SchoolPicker(current: School, onSelect: (School) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        School.entries.chunked(2).forEach { rowSchools ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rowSchools.forEach { s ->
-                    val selected = s == current
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(
-                                if (selected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                                },
+private fun SchoolSelector(current: School, onSelect: (School) -> Unit) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                MaterialTheme.shapes.medium,
+            )
+            .clickable { showPicker = true }
+            .padding(horizontal = 14.dp),
+    ) {
+        Text(
+            "学校",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                current.displayName,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                current.sourceKind.label,
+                fontSize = 9.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+
+    if (showPicker) {
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("选择学校", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    School.entries.forEachIndexed { index, s ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
                             )
-                            .then(
-                                if (selected) {
-                                    Modifier.border(
-                                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-                                        MaterialTheme.shapes.small,
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .clickable { onSelect(s) }
-                            .padding(horizontal = 8.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        }
+                        val selected = s == current
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.small)
+                                .background(
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                )
+                                .clickable {
+                                    onSelect(s)
+                                    showPicker = false
+                                }
+                                .padding(horizontal = 10.dp, vertical = 13.dp),
+                        ) {
                             Text(
                                 s.displayName,
-                                fontSize = 12.sp,
+                                fontSize = 14.sp,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (selected) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurface
                                 },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
                             )
+                            Spacer(Modifier.weight(1f))
                             Text(
                                 s.sourceKind.label,
-                                fontSize = 9.sp,
+                                fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        }
-                        if (selected) {
-                            Icon(
-                                Icons.Filled.Check,
-                                contentDescription = "已选择",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp),
-                            )
+                            if (selected) {
+                                Spacer(Modifier.width(8.dp))
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = "已选择",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
-                if (rowSchools.size == 1) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPicker = false }) { Text("关闭") }
+            },
+        )
     }
 }
 
@@ -494,7 +543,7 @@ private fun AddFriendDialog(
                     )
                 }
                 LabeledField("头像色") { ColorPicker(colorIndex) { colorIndex = it } }
-                LabeledField("学校 / 课表格式") { SchoolPicker(school) { school = it } }
+                LabeledField("学校 / 课表格式") { SchoolSelector(school) { school = it } }
 
                 Spacer(Modifier.height(14.dp))
                 OutlinedButton(
@@ -627,7 +676,7 @@ private fun FriendEditorDialog(
                     )
                 }
                 LabeledField("头像色") { ColorPicker(colorIndex) { colorIndex = it } }
-                LabeledField("学校 / 课表格式") { SchoolPicker(school) { school = it } }
+                LabeledField("学校 / 课表格式") { SchoolSelector(school) { school = it } }
                 Spacer(Modifier.height(6.dp))
                 OutlinedButton(
                     onClick = { picker.launch(school.sourceKind.mimeTypes) },
