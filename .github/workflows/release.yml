@@ -38,13 +38,14 @@ jobs:
       - name: 读取版本号
         id: version
         run: |
-          VERSION=$(cat VERSION | tr -d '[:space:]')
+          # 去掉 BOM（0xEF 0xBB 0xBF）和空白：Windows 编辑器很容易写出带 BOM 的版本号
+          VERSION=$(cat VERSION | tr -d '\357\273\277' | tr -d '[:space:]')
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f2); MINOR=${MINOR:-0}
           PATCH=$(echo "$VERSION" | cut -d. -f3); PATCH=${PATCH:-0}
           # 有 VERSION_CODE 文件时以它为准（保证能覆盖手机上已装的更高 versionCode）
           if [ -f VERSION_CODE ]; then
-            CODE=$(cat VERSION_CODE | tr -d '[:space:]')
+            CODE=$(cat VERSION_CODE | tr -d '\357\273\277' | tr -d '[:space:]')
           else
             CODE=$((MAJOR * 10000 + MINOR * 1000 + PATCH))
           fi
