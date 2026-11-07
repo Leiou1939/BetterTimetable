@@ -23,7 +23,7 @@ data class Friend(
     val data: ScheduleData? get() = CourseRepository.parse(scheduleJson)
 }
 
-/** 某一刻的状态：在上课 / 空闲 / 没课。 */
+/** 某一刻的状态：在上课 / 空闲。 */
 data class FreeStatus(
     val inClass: Boolean,
     val label: String,
@@ -81,72 +81,42 @@ class FriendStore(context: Context) {
 /**
  * 算某人在「现在这一刻」的状态。
  *
- * 上课中 → 显示还有多久下课；空闲 → 显示下一节几点；今天没课 → 显示明天有没有。
- * 和提示条同一套判断，保证两个入口说法一致。
+ * 只看"现在"：在上课就报课程、教室和还有多久下课；不在上课就是空闲。
  */
 fun statusOf(data: ScheduleData, today: LocalDate, now: LocalTime): FreeStatus {
     val week = ScheduleCalc.weekOf(data, today)
     val dayIndex = ScheduleCalc.dayIndexOf(today)
     val byIndex = data.periods.associateBy { it.index }
 
-    data class Slot(val course: Course, val start: LocalTime, val end: LocalTime)
-
-    fun slotsOf(date: LocalDate, weekNumber: Int): List<Slot> {
-        val day = ScheduleCalc.dayIndexOf(date)
-        if (day !in 0..6) return emptyList()
-        return data.coursesOn(day, weekNumber).mapNotNull { c ->
-            val start = byIndex[c.periodFrom]?.start?.toTime() ?: return@mapNotNull null
-            val end = (byIndex[c.periodTo]?.end ?: byIndex[c.periodFrom]?.end)?.toTime()
-                ?: return@mapNotNull null
-            Slot(c, start, end)
+    if (dayIndex in 0..6) {
+        val current = data.coursesOn(dayIndex, week).firstOrNull { course ->
+            val start = byIndex[course.periodFrom]?.start?.toTime() ?: return@firstOrNull false
+            val end = (byIndex[course.periodTo]?.end ?: byIndex[course.periodFrom]?.end)
+                ?.toTime() ?: return@firstOrNull false
+            now >= start && now < end
+        }
+        if (current != null) {
+            val endText = byIndex[current.periodTo]?.end ?: byIndex[current.periodFrom]?.end
+            val end = endText?.toTime()
+            val left = if (end != null) java.time.Duration.between(now, end).toMinutes() else -1
+            val place = if (current.room.isNotEmpty()) " @${current.room}" else ""
+            val tail = when {
+                left < 0 -> ""
+                left >= 60 -> " · ${left / 60} 小时 ${left % 60} 分后下课"
+                left >= 1 -> " · $left 分钟后下课"
+                else -> " · 马上下课"
+            }
+            return FreeStatus(
+                inClass = true,
+                label = "上课中",
+                detail = current.name + place + tail,
+                accentKey = current.colorKey,
+            )
         }
     }
 
-    val todaySlots = slotsOf(today, week).sortedBy { it.start }
-    todaySlots.firstOrNull { now >= it.start && now < it.end }?.let { slot ->
-        val left = java.time.Duration.between(now, slot.end).toMinutes()
-        return FreeStatus(
-            inClass = true,
-            label = "上课中",
-            detail = "${slot.course.name} · " + when {
-                left >= 60 -> "${left / 60} 小时 ${left % 60} 分后下课"
-                left >= 1 -> "$left 分钟后下课"
-                else -> "马上下课"
-            },
-            accentKey = slot.course.colorKey,
-        )
-    }
-
-    todaySlots.firstOrNull { it.start > now }?.let { slot ->
-        val mins = java.time.Duration.between(now, slot.start).toMinutes()
-        return FreeStatus(
-            inClass = false,
-            label = "空闲",
-            detail = "${slot.start.hhmm()} 上课 · " + if (mins >= 60) {
-                "${mins / 60} 小时后"
-            } else {
-                "$mins 分钟后"
-            },
-            accentKey = slot.course.colorKey,
-        )
-    }
-
-    // 今天没课了，看后面几天
-    for (offset in 1..7) {
-        val date = today.plusDays(offset.toLong())
-        val w = ScheduleCalc.weekOf(data, date)
-        if (w !in 1..data.totalWeeks.coerceAtLeast(1)) continue
-        val next = slotsOf(date, w).minByOrNull { it.start } ?: continue
-        val dayLabel = if (offset == 1) "明天" else ScheduleCalc.weekdayShort(date)
-        return FreeStatus(
-            inClass = false,
-            label = "没课",
-            detail = "$dayLabel ${next.start.hhmm()} 有课",
-            accentKey = next.course.colorKey,
-        )
-    }
-
-    return FreeStatus(inClass = false, label = "没课", detail = "最近一周没有课", accentKey = "")
+    // 不在上课就是空闲；不再预告后面的课
+    return FreeStatus(inClass = false, label = "空闲", detail = "", accentKey = "")
 }
 
 private fun String.toTime(): LocalTime? =

@@ -148,7 +148,6 @@ fun FeedbackDialog(
                         error = null
                     },
                     label = { Text("遇到的问题", fontSize = 12.sp) },
-                    placeholder = { Text("比如：导入沈阳工程学院课表后，周二第 3 节显示成周一", fontSize = 11.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 4,
                     maxLines = 8,

@@ -1,5 +1,10 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import com.liangyuchen.timetable.pdf.PdfImport
 import android.content.Context
 import android.net.Uri
@@ -76,6 +81,7 @@ fun FriendsDialog(
     var adding by remember { mutableStateOf(false) }
     var nickname by remember { mutableStateOf("") }
     var school by remember { mutableStateOf(School.entries.first()) }
+    var schoolExpanded by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -152,26 +158,22 @@ fun FriendsDialog(
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
 
-                if (friends.isEmpty()) {
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "还没有同学。点下面的按钮加一个：填昵称、选他/她的学校，再选那份课表文件。",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
+                if (friends.isNotEmpty()) {
                     friends.forEach { friend ->
                         val data = friend.data
                         Spacer(Modifier.height(10.dp))
-                        PersonRow(
-                            name = friend.nickname,
-                            school = friend.school.displayName,
-                            status = data?.let { statusOf(it, today, now) },
+                        SwipeToDelete(
                             onDelete = {
                                 store.remove(friend.id)
                                 friends = store.load()
                             },
-                        )
+                        ) {
+                            PersonRow(
+                                name = friend.nickname,
+                                school = friend.school.displayName,
+                                status = data?.let { statusOf(it, today, now) },
+                            )
+                        }
                     }
                 }
 
@@ -184,29 +186,74 @@ fun FriendsDialog(
                         value = nickname,
                         onValueChange = { nickname = it.take(12) },
                         singleLine = true,
-                        placeholder = { Text("比如：小李", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(10.dp))
-                    Text("他/她的学校", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(6.dp))
-                    Column {
-                        School.entries.chunked(2).forEach { row ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(vertical = 2.dp),
-                            ) {
-                                row.forEach { s ->
-                                    val selected = s == school
-                                    if (selected) {
-                                        Button(onClick = { school = s }) {
-                                            Text(s.displayName, fontSize = 11.sp)
+                    // 学校：折叠式，点一行展开列表
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { schoolExpanded = !schoolExpanded }
+                            .padding(vertical = 8.dp),
+                    ) {
+                        Text("他/她的学校", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            school.displayName,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Icon(
+                            imageVector = if (schoolExpanded) {
+                                Icons.Filled.KeyboardArrowUp
+                            } else {
+                                Icons.Filled.KeyboardArrowDown
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    if (schoolExpanded) {
+                        Column {
+                            School.entries.forEach { s ->
+                                val selected = s == school
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(MaterialTheme.shapes.small)
+                                        .background(
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            } else {
+                                                Color.Transparent
+                                            },
+                                        )
+                                        .clickable {
+                                            school = s
+                                            schoolExpanded = false
                                         }
-                                    } else {
-                                        OutlinedButton(onClick = { school = s }) {
-                                            Text(s.displayName, fontSize = 11.sp)
-                                        }
-                                    }
+                                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                                ) {
+                                    Text(
+                                        s.displayName,
+                                        fontSize = 12.sp,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        s.sourceKind.label,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                         }
@@ -255,7 +302,6 @@ private fun PersonRow(
     name: String,
     school: String?,
     status: com.liangyuchen.timetable.data.FreeStatus?,
-    onDelete: (() -> Unit)? = null,
 ) {
     val accent = status?.let { colorFor(it.accentKey) }
         ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -290,13 +336,16 @@ private fun PersonRow(
                     )
                 }
             }
-            Text(
-                text = status?.detail ?: "课表读取失败",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            val detail = status?.detail.orEmpty()
+            if (detail.isNotEmpty()) {
+                Text(
+                    text = detail,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Spacer(Modifier.width(8.dp))
         Text(
@@ -315,17 +364,5 @@ private fun PersonRow(
                 )
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )
-        if (onDelete != null) {
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "✕",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .clickable { onDelete() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
-        }
     }
 }
