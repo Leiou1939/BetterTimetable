@@ -1,5 +1,6 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Icon
@@ -133,16 +134,7 @@ fun FriendsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text("同学", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "看看谁在上课、谁有空。课表只存在本机",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
+        title = { Text("同学", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier
@@ -178,7 +170,12 @@ fun FriendsDialog(
                     Spacer(Modifier.height(14.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                     Spacer(Modifier.height(10.dp))
-                    Text("同学昵称", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "同学昵称",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     OutlinedTextField(
                         value = nickname,
                         onValueChange = { nickname = it.take(12) },
@@ -186,23 +183,30 @@ fun FriendsDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(10.dp))
-                    // 学校：折叠式，点一行展开列表
+                    // 学校：折叠式选择器
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.small)
+                            .height(52.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                             .clickable { schoolExpanded = !schoolExpanded }
-                            .padding(vertical = 8.dp),
+                            .padding(horizontal = 12.dp),
                     ) {
-                        Text("他/她的学校", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "学校",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Spacer(Modifier.weight(1f))
                         Text(
                             school.displayName,
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = MaterialTheme.colorScheme.primary,
                         )
+                        Spacer(Modifier.width(4.dp))
                         Icon(
                             imageVector = if (schoolExpanded) {
                                 Icons.Filled.KeyboardArrowUp
@@ -210,35 +214,40 @@ fun FriendsDialog(
                                 Icons.Filled.KeyboardArrowDown
                             },
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                     if (schoolExpanded) {
-                        Column {
-                            School.entries.forEach { s ->
+                        Spacer(Modifier.height(4.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)),
+                        ) {
+                            School.entries.forEachIndexed { index, s ->
                                 val selected = s == school
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                        modifier = Modifier.padding(horizontal = 12.dp),
+                                    )
+                                }
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(MaterialTheme.shapes.small)
-                                        .background(
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primaryContainer
-                                            } else {
-                                                Color.Transparent
-                                            },
-                                        )
                                         .clickable {
                                             school = s
                                             schoolExpanded = false
                                         }
-                                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                                        .padding(horizontal = 12.dp, vertical = 11.dp),
                                 ) {
                                     Text(
                                         s.displayName,
-                                        fontSize = 12.sp,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                         color = if (selected) {
                                             MaterialTheme.colorScheme.primary
                                         } else {
@@ -246,11 +255,20 @@ fun FriendsDialog(
                                         },
                                     )
                                     Spacer(Modifier.weight(1f))
-                                    Text(
-                                        s.sourceKind.label,
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    if (selected) {
+                                        Icon(
+                                            Icons.Filled.Check,
+                                            contentDescription = "已选择",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    } else {
+                                        Text(
+                                            s.sourceKind.label,
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }

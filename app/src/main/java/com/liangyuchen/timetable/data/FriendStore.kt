@@ -99,7 +99,7 @@ fun statusOf(data: ScheduleData, today: LocalDate, now: LocalTime): FreeStatus {
             val endText = byIndex[current.periodTo]?.end ?: byIndex[current.periodFrom]?.end
             val end = endText?.toTime()
             val left = if (end != null) java.time.Duration.between(now, end).toMinutes() else -1
-            val place = if (current.room.isNotEmpty()) " @${current.room}" else ""
+            // 只报课程和还剩多久，不显示地点
             val tail = when {
                 left < 0 -> ""
                 left >= 60 -> " · ${left / 60} 小时 ${left % 60} 分后下课"
@@ -109,7 +109,7 @@ fun statusOf(data: ScheduleData, today: LocalDate, now: LocalTime): FreeStatus {
             return FreeStatus(
                 inClass = true,
                 label = "上课中",
-                detail = current.name + place + tail,
+                detail = current.name + tail,
                 accentKey = current.colorKey,
             )
         }
