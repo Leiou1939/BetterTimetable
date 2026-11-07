@@ -162,18 +162,15 @@ fun FriendsDialog(
                     friends.forEach { friend ->
                         val data = friend.data
                         Spacer(Modifier.height(10.dp))
-                        SwipeToDelete(
+                        PersonRow(
+                            name = friend.nickname,
+                            school = friend.school.displayName,
+                            status = data?.let { statusOf(it, today, now) },
                             onDelete = {
                                 store.remove(friend.id)
                                 friends = store.load()
                             },
-                        ) {
-                            PersonRow(
-                                name = friend.nickname,
-                                school = friend.school.displayName,
-                                status = data?.let { statusOf(it, today, now) },
-                            )
-                        }
+                        )
                     }
                 }
 
@@ -302,6 +299,7 @@ private fun PersonRow(
     name: String,
     school: String?,
     status: com.liangyuchen.timetable.data.FreeStatus?,
+    onDelete: (() -> Unit)? = null,
 ) {
     val accent = status?.let { colorFor(it.accentKey) }
         ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -356,5 +354,17 @@ private fun PersonRow(
                 )
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )
+        if (onDelete != null) {
+            Spacer(Modifier.width(2.dp))
+            Text(
+                "✕",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { onDelete() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
     }
 }
