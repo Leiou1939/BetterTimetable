@@ -156,6 +156,20 @@ fun FriendsDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
     )
 
+    // 快速添加：蓝牙面对面交换课表
+    if (quickAdd) {
+        QuickAddDialog(
+            context = context,
+            myData = myData,
+            myProfile = me,
+            onDismiss = { quickAdd = false },
+            onAdded = {
+                friends = store.load()
+                quickAdd = false
+            },
+        )
+    }
+
     if (adding) {
         AddFriendDialog(
             context = context,
