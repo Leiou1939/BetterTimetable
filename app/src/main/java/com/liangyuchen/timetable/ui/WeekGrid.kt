@@ -159,27 +159,15 @@ fun WeekGrid(
         }
     }
 
-    // 「下一节」：只在看本周时显示；当天没课、课都上完了就不占位置
-    val nowTime = remember(clockTick) { LocalTime.now() }
-    val nextClass = remember(week, today, clockTick) {
-        if (!isCurrentWeek) null else nextClassToday(data, week, today, nowTime)
-    }
-    val bannerHeight = if (nextClass != null) NEXT_BANNER_HEIGHT else 0.dp
-
     BoxWithConstraints(modifier = modifier) {
         val days = data.dayCount.coerceIn(1, 7)
         val metrics = gridMetrics(maxWidth, days)
         // 纵向也自适应：把可用高度均分给各节次，避免表格下方留出空白。
         // 屏幕比「62dp 表头 + 10×51dp」矮时保持最小行高并允许滚动。
-        val rowHeight = rowHeightFor(
-            if (maxHeight == Dp.Infinity) maxHeight else maxHeight - bannerHeight,
-            periods.size,
-        )
+        val rowHeight = rowHeightFor(maxHeight, periods.size)
         // 节次少（如沈阳工程学院只有 5 个大节）时，行高上限之外剩余的高度
         // 交给表头吸收，避免表格下方又空出一块。
-        val usableHeight = if (maxHeight == Dp.Infinity) maxHeight else maxHeight - bannerHeight
-        // 用小屏判断时要扣掉「下一节」那条的高度，否则矮屏会多出几个 dp
-        val minHeader = if (maxHeight != Dp.Infinity && usableHeight < 520.dp) {
+        val minHeader = if (maxHeight != Dp.Infinity && maxHeight < 520.dp) {
             HEADER_HEIGHT_SMALL
         } else {
             HEADER_HEIGHT
@@ -187,7 +175,7 @@ fun WeekGrid(
         val headerHeight = if (maxHeight == Dp.Infinity) {
             HEADER_HEIGHT
         } else {
-            (usableHeight - rowHeight * periods.size).coerceIn(minHeader, HEADER_MAX)
+            (maxHeight - rowHeight * periods.size).coerceIn(minHeader, HEADER_MAX)
         }
         val gridHeight = rowHeight * periods.size
         val nowTop = remember(week, today, clockTick, rowHeight) {
@@ -219,7 +207,7 @@ fun WeekGrid(
                     .width(metrics.timeCol)
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
-                Spacer(Modifier.height(headerHeight + bannerHeight))
+                Spacer(Modifier.height(headerHeight))
                 periods.forEach { period ->
                     Column(
                         modifier = Modifier
@@ -299,14 +287,6 @@ fun WeekGrid(
                     },
                 ) {
                     Column {
-                        if (nextClass != null) {
-                            NextClassBanner(
-                                next = nextClass,
-                                now = nowTime,
-                                height = NEXT_BANNER_HEIGHT,
-                                width = metrics.gridWidth,
-                            )
-                        }
                         DayHeaderRow(
                             data = data,
                             days = days,
@@ -592,117 +572,4 @@ private fun nowFractionTop(data: ScheduleData, rowHeight: Dp = ROW_HEIGHT): Dp? 
         }
     }
     return null
-}
-
-// ---------------------------------------------------------------- 下一节
-
-private val NEXT_BANNER_HEIGHT = 34.dp
-
-internal data class NextClass(
-    val course: Course,
-    val start: LocalTime,
-    val end: LocalTime,
-)
-
-/**
- * 今天"还没下课"的第一门课。正在上的课也会返回（提示语会变成"正在上课"）。
- * 当天没有课、或者都已经上完了，返回 null。
- */
-internal fun nextClassToday(
-    data: ScheduleData,
-    week: Int,
-    today: LocalDate,
-    now: LocalTime,
-): NextClass? {
-    if (week != ScheduleCalc.weekOf(data, today)) return null
-    val dayIndex = ScheduleCalc.dayIndexOf(today)
-    if (dayIndex !in 0..6) return null
-    val byIndex = data.periods.associateBy { it.index }
-    return data.coursesOn(dayIndex, week)
-        .mapNotNull { course ->
-            val start = byIndex[course.periodFrom]?.start?.let(::parseClock) ?: return@mapNotNull null
-            val endText = byIndex[course.periodTo]?.end
-                ?: byIndex[course.periodFrom]?.end
-                ?: return@mapNotNull null
-            val end = parseClock(endText) ?: return@mapNotNull null
-            if (end <= now) return@mapNotNull null      // 已经下课
-            NextClass(course, start, end)
-        }
-        .minByOrNull { it.start }
-}
-
-private fun parseClock(text: String): LocalTime? =
-    runCatching { LocalTime.parse(text.trim()) }.getOrNull()
-
-/** 「还有 12 分钟」这种说法：超过一小时才说小时。 */
-internal fun countdownText(start: LocalTime, now: LocalTime): String {
-    val minutes = java.time.Duration.between(now, start).toMinutes()
-    return when {
-        minutes >= 60 -> "${minutes / 60} 小时 ${minutes % 60} 分后"
-        minutes >= 1 -> "$minutes 分钟后"
-        else -> "马上开始"
-    }
-}
-
-@Composable
-private fun NextClassBanner(
-    next: NextClass,
-    now: LocalTime,
-    height: Dp,
-    width: Dp,
-) {
-    val inProgress = now >= next.start && now < next.end
-    val accent = colorFor(next.course.colorKey)
-    Row(
-        modifier = Modifier
-            .width(width)
-            .height(height)
-            .background(accent.copy(alpha = 0.10f))
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // 左边一条细色条，和课程块同色，一眼知道是哪门
-        Box(
-            Modifier
-                .width(3.dp)
-                .fillMaxHeight()
-                .background(accent),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = if (inProgress) "正在上" else "下一节",
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = next.course.name,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (next.course.room.isNotEmpty()) {
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = "@" + next.course.room,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = if (inProgress) "第 ${next.course.periodFrom}-${next.course.periodTo} 节"
-            else countdownText(next.start, now),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = accent,
-            maxLines = 1,
-        )
-    }
 }

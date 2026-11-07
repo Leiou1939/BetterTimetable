@@ -341,6 +341,15 @@ fun TimetableScreen(
                 .padding(innerPadding)
                 .windowInsetsPadding(WindowInsets.systemBars),
         ) {
+            // 「下一节」常驻在顶部：翻周、切日视图都不动
+            if (viewModel.hasCourses) {
+                NextClassBanner(
+                    data = data,
+                    week = viewModel.week,
+                    today = today,
+                )
+            }
+
             // 没有课表时先引导导入（首次安装进入就是这里）
             if (!viewModel.hasCourses) {
                 EmptyScheduleGuide(
