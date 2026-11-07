@@ -1,5 +1,6 @@
 package com.liangyuchen.timetable.ui
 
+import androidx.compose.material.icons.filled.People
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.animateContentSize
@@ -161,6 +162,7 @@ fun TimetableScreen(
     var showSchoolPicker by remember { mutableStateOf(false) }
     var pendingSchool by remember { mutableStateOf(viewModel.importSchool) }
     var showFeedback by remember { mutableStateOf(false) }
+    var showFriends by remember { mutableStateOf(false) }
     var showSchoolRequest by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -330,6 +332,10 @@ fun TimetableScreen(
                         IconButton(onClick = { showSchoolPicker = true }) {
                             Icon(Icons.Filled.FileOpen, contentDescription = "导入课表")
                         }
+                    }
+                    // 同学：看谁在上课、谁有空
+                    IconButton(onClick = { showFriends = true }) {
+                        Icon(Icons.Filled.People, contentDescription = "同学")
                     }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Filled.Settings, contentDescription = "设置")
@@ -514,6 +520,16 @@ fun TimetableScreen(
             context = context,
             repo = UpdateChecker.repo(context),
             onDismiss = { showSchoolRequest = false },
+        )
+    }
+
+    if (showFriends) {
+        FriendsDialog(
+            context = context,
+            myName = "我",
+            myData = data,
+            today = today,
+            onDismiss = { showFriends = false },
         )
     }
 
