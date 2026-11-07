@@ -147,13 +147,32 @@ fun FriendsDialog(
                 }
             }
         },
+        // 三个按钮塞进同一行：AlertDialog 默认把 dismissButton 换行，
+        // 手机上会掉到下面去，所以这里自己排。
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { adding = true }) { Text("手动添加", fontSize = 13.sp) }
-                Button(onClick = { quickAdd = true }) { Text("快速添加", fontSize = 13.sp) }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(
+                    onClick = { adding = true },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 6.dp,
+                    ),
+                ) { Text("手动添加", fontSize = 12.sp) }
+                Button(
+                    onClick = { quickAdd = true },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 10.dp,
+                        vertical = 6.dp,
+                    ),
+                ) { Text("快速添加", fontSize = 12.sp) }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text("关闭", fontSize = 13.sp) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
     )
 
     // 快速添加：蓝牙面对面交换课表

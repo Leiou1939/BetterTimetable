@@ -137,20 +137,22 @@ fun QuickAddDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("快速添加", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+        title = {
+            Column {
+                Text("快速添加", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "请保持在此窗口以保证传输正常",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
         text = {
             Column(
                 modifier = Modifier
                     .heightIn(max = 420.dp)
                     .verticalScroll(rememberScrollState()),
             ) {
-                Text(
-                    "两台手机都打开这个窗口、都点「开始交换」，面对面等几秒，互相就能拿到课表。",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-
                 if (!running) {
                     Button(
                         onClick = { permissionLauncher.launch(permissions) },
@@ -180,11 +182,6 @@ fun QuickAddDialog(
 
                 if (peers.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        "附近的同学",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                     peers.forEach { name ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
