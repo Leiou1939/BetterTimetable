@@ -3,10 +3,8 @@ package com.liangyuchen.timetable.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -19,17 +17,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * 左滑露出「删除」。
+ * 左滑删除：滑过一行宽度的 1/3 就直接删掉，没到就弹回去。
  *
- * 用手指拖动位移，松手时：滑过一半就滑到删除位，否则弹回去。
- * 列表里不再常驻一个 ✕，误触少很多。
+ * 不做"先滑开、再点删除"两步——那一步在小屏幕上很容易点不中。
  */
 @Composable
 fun SwipeToDelete(
@@ -38,29 +35,25 @@ fun SwipeToDelete(
 ) {
     val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val revealWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { 72.dp.toPx() }
+    val screenWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        // 底层：删除按钮
+        // 底层：滑开时露出的红色删除区
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .padding(vertical = 4.dp)
                 .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
-                .clickable {
-                    scope.launch {
-                        offset.animateTo(-revealWidthPx * 1.4f, tween(120))
-                        onDelete()
-                    }
-                },
+                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.14f)),
             contentAlignment = Alignment.CenterEnd,
         ) {
             Text(
                 "删除",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(end = 16.dp),
+                modifier = Modifier.padding(end = 18.dp),
             )
         }
 
@@ -69,9 +62,14 @@ fun SwipeToDelete(
             modifier = Modifier.pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
-                        scope.launch {
-                            val target = if (offset.value < -revealWidthPx / 2f) -revealWidthPx else 0f
-                            offset.animateTo(target, tween(180))
+                        val threshold = -screenWidthPx * 0.33f
+                        if (offset.value <= threshold) {
+                            scope.launch {
+                                offset.animateTo(-screenWidthPx, tween(140))
+                                onDelete()
+                            }
+                        } else {
+                            scope.launch { offset.animateTo(0f, tween(180)) }
                         }
                     },
                     onDragCancel = {
@@ -80,7 +78,8 @@ fun SwipeToDelete(
                 ) { change, dragAmount ->
                     change.consume()
                     scope.launch {
-                        offset.snapTo((offset.value + dragAmount).coerceIn(-revealWidthPx, 0f))
+                        // 只允许往左拉
+                        offset.snapTo((offset.value + dragAmount).coerceIn(-screenWidthPx, 0f))
                     }
                 }
             },

@@ -309,14 +309,6 @@ private fun PersonRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Box(
-            Modifier
-                .width(3.dp)
-                .height(34.dp)
-                .clip(MaterialTheme.shapes.extraSmall)
-                .background(accent),
-        )
-        Spacer(Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
