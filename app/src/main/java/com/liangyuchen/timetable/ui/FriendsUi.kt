@@ -163,10 +163,7 @@ fun FriendsDialog(
             myData = myData,
             myProfile = me,
             onDismiss = { quickAdd = false },
-            onAdded = {
-                friends = store.load()
-                quickAdd = false
-            },
+            onAdded = { friends = store.load() },
         )
     }
 
